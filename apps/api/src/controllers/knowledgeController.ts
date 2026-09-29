@@ -1,66 +1,85 @@
 import { Request, Response } from 'express';
-import { memoryStore } from '../db/supabase.js';
+import { memoryStore, supabase } from '../db/supabase.js';
+import {
+  getObservations as fetchObservations,
+  getObservationById as fetchObservationById,
+  getDatasets as fetchDatasets,
+  getDatasetById as fetchDatasetById,
+  getMedia as fetchMedia,
+  getMediaById as fetchMediaById,
+  getKnowledgeGraphData
+} from '../db/repository.js';
 
 export async function getObservations(req: Request, res: Response) {
-  const { domain, status, expedition_id, query } = req.query;
+  try {
+    const { domain, status, expedition_id, query } = req.query;
+    const list = await fetchObservations({
+      domain: typeof domain === 'string' ? domain : undefined,
+      status: typeof status === 'string' ? status : undefined,
+      expedition_id: typeof expedition_id === 'string' ? expedition_id : undefined,
+      query: typeof query === 'string' ? query : undefined
+    });
 
-  let list = [...memoryStore.observations];
-
-  if (domain && typeof domain === 'string') {
-    list = list.filter((o) => o.research_domain.toLowerCase() === domain.toLowerCase());
+    return res.status(200).json({
+      success: true,
+      data: list
+    });
+  } catch (err: any) {
+    return res.status(500).json({
+      success: false,
+      error: { code: 'OBSERVATIONS_ERROR', message: err.message || 'Error fetching observations' }
+    });
   }
-
-  if (status && typeof status === 'string') {
-    list = list.filter((o) => o.verification_status === status);
-  }
-
-  if (expedition_id && typeof expedition_id === 'string') {
-    list = list.filter((o) => o.expedition_id === expedition_id);
-  }
-
-  if (query && typeof query === 'string') {
-    const q = query.toLowerCase();
-    list = list.filter((o) => o.title.toLowerCase().includes(q) || o.description.toLowerCase().includes(q));
-  }
-
-  return res.status(200).json({
-    success: true,
-    data: list
-  });
 }
 
 export async function getObservationById(req: Request, res: Response) {
-  const { id } = req.params;
-  const observation = memoryStore.observations.find((o) => o.id === id);
+  try {
+    const id = String(req.params.id);
+    const data = await fetchObservationById(id);
 
-  if (!observation) {
-    return res.status(404).json({
+    if (!data) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: `Observation ${id} not found.` }
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data
+    });
+  } catch (err: any) {
+    return res.status(500).json({
       success: false,
-      error: { code: 'NOT_FOUND', message: `Observation ${id} not found.` }
+      error: { code: 'OBSERVATION_ERROR', message: err.message || 'Error fetching observation' }
     });
   }
-
-  const measurements = memoryStore.measurements.filter((m) => m.observation_id === id);
-  const evidence = memoryStore.evidenceLinks.filter((e) => e.knowledge_id === id);
-  const relationships = memoryStore.relationships.filter(
-    (r) => r.source_entity_id === id || r.target_entity_id === id
-  );
-
-  return res.status(200).json({
-    success: true,
-    data: {
-      ...observation,
-      measurements,
-      evidence,
-      relationships
-    }
-  });
 }
 
 export async function updateObservation(req: Request, res: Response) {
   const { id } = req.params;
-  const idx = memoryStore.observations.findIndex((o) => o.id === id);
 
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('observations')
+        .update(req.body)
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (!error && data) {
+        return res.status(200).json({
+          success: true,
+          data
+        });
+      }
+    } catch (err: any) {
+      console.warn(`[POLARWEAVE DB] Error updating observation ${id}:`, err?.message);
+    }
+  }
+
+  const idx = memoryStore.observations.findIndex((o) => o.id === id);
   if (idx === -1) {
     return res.status(404).json({
       success: false,
@@ -80,6 +99,20 @@ export async function updateObservation(req: Request, res: Response) {
 }
 
 export async function getExpeditions(req: Request, res: Response) {
+  if (supabase) {
+    try {
+      const { data, error } = await supabase.from('expeditions').select('*');
+      if (!error && data && data.length > 0) {
+        return res.status(200).json({
+          success: true,
+          data
+        });
+      }
+    } catch (err: any) {
+      console.warn('[POLARWEAVE DB] Error fetching expeditions from DB:', err?.message);
+    }
+  }
+
   return res.status(200).json({
     success: true,
     data: memoryStore.expeditions
@@ -89,9 +122,29 @@ export async function getExpeditions(req: Request, res: Response) {
 export async function getExpeditionById(req: Request, res: Response) {
   const { id } = req.params;
   const idStr = String(id || '');
-  const expedition = memoryStore.expeditions.find(
-    (e) => e.id === idStr || e.code.toLowerCase() === idStr.toLowerCase()
-  );
+
+  let expedition: any = null;
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('expeditions')
+        .select('*')
+        .or(`id.eq.${idStr},code.ilike.${idStr}`)
+        .maybeSingle();
+
+      if (!error && data) {
+        expedition = data;
+      }
+    } catch (err: any) {
+      console.warn(`[POLARWEAVE DB] Error fetching expedition ${idStr}:`, err?.message);
+    }
+  }
+
+  if (!expedition) {
+    expedition = memoryStore.expeditions.find(
+      (e) => e.id === idStr || e.code.toLowerCase() === idStr.toLowerCase()
+    );
+  }
 
   if (!expedition) {
     return res.status(404).json({
@@ -100,17 +153,16 @@ export async function getExpeditionById(req: Request, res: Response) {
     });
   }
 
-  const relatedObs = memoryStore.observations.filter((o) => o.expedition_id === expedition.id);
-  const relatedDocs = memoryStore.documents;
-  const relatedDatasets = memoryStore.datasets.filter((d) => d.expedition_id === expedition.id);
-  const relatedMedia = memoryStore.media.filter((m) => m.expedition_id === expedition.id);
+  const relatedObs = await fetchObservations({ expedition_id: expedition.id });
+  const relatedDatasets = (await fetchDatasets()).filter((d) => d.expedition_id === expedition.id);
+  const relatedMedia = (await fetchMedia()).filter((m) => m.expedition_id === expedition.id);
 
   return res.status(200).json({
     success: true,
     data: {
       ...expedition,
       observations: relatedObs,
-      documents: relatedDocs,
+      documents: memoryStore.documents,
       datasets: relatedDatasets,
       media: relatedMedia
     }
@@ -118,6 +170,20 @@ export async function getExpeditionById(req: Request, res: Response) {
 }
 
 export async function getLocations(req: Request, res: Response) {
+  if (supabase) {
+    try {
+      const { data, error } = await supabase.from('locations').select('*');
+      if (!error && data && data.length > 0) {
+        return res.status(200).json({
+          success: true,
+          data
+        });
+      }
+    } catch (err: any) {
+      console.warn('[POLARWEAVE DB] Error fetching locations:', err?.message);
+    }
+  }
+
   return res.status(200).json({
     success: true,
     data: memoryStore.locations
@@ -125,15 +191,16 @@ export async function getLocations(req: Request, res: Response) {
 }
 
 export async function getDatasets(req: Request, res: Response) {
+  const list = await fetchDatasets();
   return res.status(200).json({
     success: true,
-    data: memoryStore.datasets
+    data: list
   });
 }
 
 export async function getDatasetById(req: Request, res: Response) {
-  const { id } = req.params;
-  const dataset = memoryStore.datasets.find((d) => d.id === id);
+  const id = String(req.params.id);
+  const dataset = await fetchDatasetById(id);
 
   if (!dataset) {
     return res.status(404).json({
@@ -150,10 +217,7 @@ export async function getDatasetById(req: Request, res: Response) {
 
 export async function getMedia(req: Request, res: Response) {
   const { type } = req.query;
-  let list = [...memoryStore.media];
-  if (type && typeof type === 'string') {
-    list = list.filter((m) => m.type === type);
-  }
+  const list = await fetchMedia(typeof type === 'string' ? type : undefined);
   return res.status(200).json({
     success: true,
     data: list
@@ -161,8 +225,8 @@ export async function getMedia(req: Request, res: Response) {
 }
 
 export async function getMediaById(req: Request, res: Response) {
-  const { id } = req.params;
-  const item = memoryStore.media.find((m) => m.id === id);
+  const id = String(req.params.id);
+  const item = await fetchMediaById(id);
   if (!item) {
     return res.status(404).json({
       success: false,
@@ -176,92 +240,16 @@ export async function getMediaById(req: Request, res: Response) {
 }
 
 export async function getKnowledgeGraph(req: Request, res: Response) {
-  // Returns nodes and edges formatted for React Flow
-  const nodes: Array<{
-    id: string;
-    type: string;
-    data: Record<string, unknown>;
-    position: { x: number; y: number };
-  }> = [];
-
-  const edges: Array<{
-    id: string;
-    source: string;
-    target: string;
-    label?: string;
-    animated?: boolean;
-    style?: Record<string, unknown>;
-  }> = [];
-
-  // Expeditions
-  memoryStore.expeditions.forEach((exp, idx) => {
-    nodes.push({
-      id: exp.id,
-      type: 'expedition',
-      data: { title: exp.title, code: exp.code, region: exp.region, status: exp.status },
-      position: { x: 350 + idx * 300, y: 50 }
+  try {
+    const graphData = await getKnowledgeGraphData();
+    return res.status(200).json({
+      success: true,
+      data: graphData
     });
-  });
-
-  // Locations
-  memoryStore.locations.forEach((loc, idx) => {
-    nodes.push({
-      id: loc.id,
-      type: 'location',
-      data: { title: loc.name, region: loc.region, station: loc.station, coordinates: `${loc.latitude}, ${loc.longitude}` },
-      position: { x: 100 + idx * 220, y: 220 }
+  } catch (err: any) {
+    return res.status(500).json({
+      success: false,
+      error: { code: 'GRAPH_ERROR', message: err.message || 'Error generating knowledge graph' }
     });
-  });
-
-  // Observations
-  memoryStore.observations.forEach((obs, idx) => {
-    nodes.push({
-      id: obs.id,
-      type: 'observation',
-      data: {
-        title: obs.title,
-        domain: obs.research_domain,
-        confidence: obs.confidence,
-        status: obs.verification_status
-      },
-      position: { x: 150 + idx * 240, y: 380 }
-    });
-  });
-
-  // Datasets
-  memoryStore.datasets.forEach((dts, idx) => {
-    nodes.push({
-      id: dts.id,
-      type: 'dataset',
-      data: { title: dts.title, filename: dts.filename, rows: dts.row_count },
-      position: { x: 200 + idx * 280, y: 540 }
-    });
-  });
-
-  // Media
-  memoryStore.media.forEach((med, idx) => {
-    nodes.push({
-      id: med.id,
-      type: 'media',
-      data: { title: med.filename, type: med.type, caption: med.ai_analysis_json?.caption },
-      position: { x: 500 + idx * 260, y: 540 }
-    });
-  });
-
-  // Add relationships as edges
-  memoryStore.relationships.forEach((rel) => {
-    edges.push({
-      id: rel.id,
-      source: rel.source_entity_id,
-      target: rel.target_entity_id,
-      label: rel.label || rel.relationship_type,
-      style: { stroke: '#94A3B8', strokeWidth: 1.5 },
-      animated: rel.status === 'suggested'
-    });
-  });
-
-  return res.status(200).json({
-    success: true,
-    data: { nodes, edges }
-  });
+  }
 }

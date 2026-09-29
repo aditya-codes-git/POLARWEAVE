@@ -1,0 +1,1074 @@
+import { v4 as uuidv4 } from 'uuid';
+import { supabase, memoryStore } from './supabase.js';
+import {
+  ProcessingJob,
+  Document as PolarDocument,
+  Dataset,
+  MediaAsset,
+  Observation,
+  EvidenceLink,
+  KnowledgeRelationship,
+  GeneratedContent
+} from '@polarweave/types';
+
+const BUCKET_NAME = 'polarweave-assets';
+
+// -------------------------------------------------------------
+// 1. SUPABASE STORAGE INTEGRATION
+// -------------------------------------------------------------
+export async function uploadStorageFile(
+  folder: 'documents' | 'datasets' | 'images' | 'videos' | 'thumbnails' | 'generated',
+  filename: string,
+  buffer: Buffer,
+  contentType: string
+): Promise<{ storagePath: string; publicUrl: string }> {
+  const sanitizedName = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const uniqueKey = `${Date.now()}_${sanitizedName}`;
+  const storagePath = `${folder}/${uniqueKey}`;
+
+  if (supabase) {
+    try {
+      const { data, error } = await supabase.storage
+        .from(BUCKET_NAME)
+        .upload(storagePath, buffer, {
+          contentType,
+          upsert: true
+        });
+
+      if (!error && data) {
+        const { data: publicUrlData } = supabase.storage
+          .from(BUCKET_NAME)
+          .getPublicUrl(storagePath);
+
+        return {
+          storagePath: data.path,
+          publicUrl: publicUrlData.publicUrl
+        };
+      } else if (error) {
+        console.warn(`[POLARWEAVE Storage] Upload warning for ${filename}:`, error.message);
+      }
+    } catch (err: any) {
+      console.warn(`[POLARWEAVE Storage] Supabase Storage exception:`, err?.message);
+    }
+  }
+
+  // Fallback storage reference
+  return {
+    storagePath,
+    publicUrl: `/storage/${storagePath}`
+  };
+}
+
+// -------------------------------------------------------------
+// 2. PROCESSING JOBS PERSISTENCE
+// -------------------------------------------------------------
+export async function createProcessingJob(job: ProcessingJob): Promise<ProcessingJob> {
+  // Always update memoryStore as cache/fallback
+  memoryStore.jobs.unshift(job);
+
+  if (supabase) {
+    try {
+      const { error } = await supabase.from('processing_jobs').insert({
+        id: job.id,
+        filename: job.filename,
+        file_type: job.file_type,
+        size_bytes: job.size_bytes,
+        status: job.status,
+        current_stage: job.current_stage,
+        stages: job.stages,
+        progress: job.progress,
+        error_message: job.error_message || null,
+        result_summary: job.result_summary || {},
+        started_at: job.started_at,
+        completed_at: job.completed_at || null
+      });
+
+      if (error) {
+        console.warn('[POLARWEAVE DB] Error creating processing_job in DB:', error.message);
+      }
+    } catch (err: any) {
+      console.warn('[POLARWEAVE DB] Exception inserting processing_job:', err?.message);
+    }
+  }
+
+  return job;
+}
+
+export async function updateProcessingJob(
+  id: string,
+  updates: Partial<ProcessingJob>
+): Promise<ProcessingJob | null> {
+  const memIdx = memoryStore.jobs.findIndex((j) => j.id === id);
+  if (memIdx !== -1) {
+    memoryStore.jobs[memIdx] = { ...memoryStore.jobs[memIdx], ...updates };
+  }
+
+  if (supabase) {
+    try {
+      const dbPayload: any = {};
+      if (updates.status !== undefined) dbPayload.status = updates.status;
+      if (updates.current_stage !== undefined) dbPayload.current_stage = updates.current_stage;
+      if (updates.stages !== undefined) dbPayload.stages = updates.stages;
+      if (updates.progress !== undefined) dbPayload.progress = updates.progress;
+      if (updates.error_message !== undefined) dbPayload.error_message = updates.error_message;
+      if (updates.result_summary !== undefined) dbPayload.result_summary = updates.result_summary;
+      if (updates.completed_at !== undefined) dbPayload.completed_at = updates.completed_at;
+
+      const { error } = await supabase.from('processing_jobs').update(dbPayload).eq('id', id);
+      if (error) {
+        console.warn(`[POLARWEAVE DB] Error updating job ${id}:`, error.message);
+      }
+    } catch (err: any) {
+      console.warn(`[POLARWEAVE DB] Exception updating job ${id}:`, err?.message);
+    }
+  }
+
+  return memIdx !== -1 ? memoryStore.jobs[memIdx] : null;
+}
+
+export async function getProcessingJobs(): Promise<ProcessingJob[]> {
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('processing_jobs')
+        .select('*')
+        .order('started_at', { ascending: false });
+
+      if (!error && data && data.length > 0) {
+        // Merge with memoryStore demo jobs if not present
+        const dbJobIds = new Set(data.map((j) => j.id));
+        const extraMemJobs = memoryStore.jobs.filter((j) => !dbJobIds.has(j.id));
+        return [...data, ...extraMemJobs];
+      }
+    } catch (err: any) {
+      console.warn('[POLARWEAVE DB] Error fetching processing_jobs:', err?.message);
+    }
+  }
+
+  return memoryStore.jobs;
+}
+
+export async function getProcessingJobById(id: string): Promise<ProcessingJob | null> {
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('processing_jobs')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (!error && data) {
+        return data as ProcessingJob;
+      }
+    } catch (err: any) {
+      console.warn(`[POLARWEAVE DB] Error fetching job ${id}:`, err?.message);
+    }
+  }
+
+  return memoryStore.jobs.find((j) => j.id === id) || null;
+}
+
+// -------------------------------------------------------------
+// 3. DOCUMENT & CHUNKS PERSISTENCE
+// -------------------------------------------------------------
+export async function createDocument(
+  doc: PolarDocument,
+  chunks?: Array<{ page_number: number; section?: string; content: string; token_count?: number }>
+): Promise<PolarDocument> {
+  memoryStore.documents.unshift(doc);
+
+  if (supabase) {
+    try {
+      const { error } = await supabase.from('documents').insert({
+        id: doc.id,
+        filename: doc.filename,
+        storage_path: doc.storage_path,
+        mime_type: doc.mime_type,
+        size_bytes: doc.size_bytes,
+        document_type: doc.document_type || 'expedition_report',
+        processing_status: doc.processing_status || 'completed',
+        page_count: doc.page_count || null,
+        metadata_json: doc.metadata_json || {},
+        created_at: doc.created_at || new Date().toISOString()
+      });
+
+      if (error) {
+        console.warn(`[POLARWEAVE DB] Error inserting document ${doc.id}:`, error.message);
+      } else if (chunks && chunks.length > 0) {
+        const chunkRecords = chunks.map((c) => ({
+          id: `chk_${uuidv4().slice(0, 8)}`,
+          document_id: doc.id,
+          page_number: c.page_number,
+          section: c.section || 'General Excerpt',
+          content: c.content,
+          token_count: c.token_count || Math.ceil(c.content.length / 4),
+          created_at: new Date().toISOString()
+        }));
+
+        const { error: chunkErr } = await supabase.from('document_chunks').insert(chunkRecords);
+        if (chunkErr) {
+          console.warn(`[POLARWEAVE DB] Error inserting chunks for ${doc.id}:`, chunkErr.message);
+        }
+      }
+    } catch (err: any) {
+      console.warn(`[POLARWEAVE DB] Exception inserting document ${doc.id}:`, err?.message);
+    }
+  }
+
+  return doc;
+}
+
+export async function getDocuments(): Promise<PolarDocument[]> {
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('documents')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!error && data && data.length > 0) {
+        const dbDocIds = new Set(data.map((d) => d.id));
+        const extraMemDocs = memoryStore.documents.filter((d) => !dbDocIds.has(d.id));
+        return [...data, ...extraMemDocs];
+      }
+    } catch (err: any) {
+      console.warn('[POLARWEAVE DB] Error fetching documents:', err?.message);
+    }
+  }
+
+  return memoryStore.documents;
+}
+
+// -------------------------------------------------------------
+// 4. DATASETS PERSISTENCE
+// -------------------------------------------------------------
+export async function createDataset(dataset: Dataset): Promise<Dataset> {
+  memoryStore.datasets.unshift(dataset);
+
+  if (supabase) {
+    try {
+      // Ensure expedition_id exists or set to null
+      let expeditionId: string | null = dataset.expedition_id || null;
+      if (expeditionId) {
+        const { data: expMatch } = await supabase
+          .from('expeditions')
+          .select('id')
+          .eq('id', expeditionId)
+          .maybeSingle();
+        if (!expMatch) expeditionId = null;
+      }
+
+      const { error } = await supabase.from('datasets').insert({
+        id: dataset.id,
+        title: dataset.title,
+        filename: dataset.filename,
+        file_path: dataset.file_path,
+        source_document_id: null,
+        row_count: dataset.row_count || 0,
+        column_count: dataset.column_count || 0,
+        schema_json: dataset.columns || [],
+        preview_data: dataset.preview_data || [],
+        processing_status: dataset.processing_status || 'completed',
+        region: 'Antarctica',
+        expedition_id: expeditionId,
+        created_at: dataset.created_at || new Date().toISOString()
+      });
+
+      if (error) {
+        console.warn(`[POLARWEAVE DB] Error inserting dataset ${dataset.id}:`, error.message);
+      }
+    } catch (err: any) {
+      console.warn(`[POLARWEAVE DB] Exception inserting dataset ${dataset.id}:`, err?.message);
+    }
+  }
+
+  return dataset;
+}
+
+export async function getDatasets(): Promise<Dataset[]> {
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('datasets')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!error && data && data.length > 0) {
+        const dbIds = new Set(data.map((d) => d.id));
+        const extraMem = memoryStore.datasets.filter((d) => !dbIds.has(d.id));
+        const mapped = data.map((d) => ({
+          id: d.id,
+          title: d.title,
+          filename: d.filename,
+          file_path: d.file_path,
+          row_count: d.row_count,
+          column_count: d.column_count,
+          columns: d.schema_json || [],
+          preview_data: d.preview_data || [],
+          processing_status: d.processing_status,
+          expedition_id: d.expedition_id,
+          created_at: d.created_at
+        }));
+        return [...mapped, ...extraMem];
+      }
+    } catch (err: any) {
+      console.warn('[POLARWEAVE DB] Error fetching datasets:', err?.message);
+    }
+  }
+
+  return memoryStore.datasets;
+}
+
+export async function getDatasetById(id: string): Promise<Dataset | null> {
+  if (supabase) {
+    try {
+      const { data, error } = await supabase.from('datasets').select('*').eq('id', id).single();
+      if (!error && data) {
+        return {
+          id: data.id,
+          title: data.title,
+          filename: data.filename,
+          file_path: data.file_path,
+          row_count: data.row_count,
+          column_count: data.column_count,
+          columns: data.schema_json || [],
+          preview_data: data.preview_data || [],
+          processing_status: data.processing_status,
+          expedition_id: data.expedition_id,
+          created_at: data.created_at
+        };
+      }
+    } catch (err: any) {
+      console.warn(`[POLARWEAVE DB] Error fetching dataset ${id}:`, err?.message);
+    }
+  }
+
+  return memoryStore.datasets.find((d) => d.id === id) || null;
+}
+
+// -------------------------------------------------------------
+// 5. MEDIA ASSETS PERSISTENCE
+// -------------------------------------------------------------
+export async function createMediaAsset(media: MediaAsset): Promise<MediaAsset> {
+  memoryStore.media.unshift(media);
+
+  if (supabase) {
+    try {
+      let expeditionId: string | null = media.expedition_id || null;
+      if (expeditionId) {
+        const { data: expMatch } = await supabase
+          .from('expeditions')
+          .select('id')
+          .eq('id', expeditionId)
+          .maybeSingle();
+        if (!expMatch) expeditionId = null;
+      }
+
+      const { error } = await supabase.from('media_assets').insert({
+        id: media.id,
+        filename: media.filename,
+        storage_path: media.storage_path,
+        type: media.type,
+        thumbnail_path: media.thumbnail_path || null,
+        expedition_id: expeditionId,
+        location_id: null,
+        location_name: media.location_name || 'Bharati Research Station',
+        capture_date: media.capture_date || new Date().toISOString(),
+        metadata_json: media.metadata_json || {},
+        ai_analysis_json: media.ai_analysis_json || {},
+        transcript: media.transcript || {},
+        duration_seconds: media.duration_seconds || null,
+        processing_status: media.processing_status || 'completed',
+        created_at: media.created_at || new Date().toISOString()
+      });
+
+      if (error) {
+        console.warn(`[POLARWEAVE DB] Error inserting media_asset ${media.id}:`, error.message);
+      }
+    } catch (err: any) {
+      console.warn(`[POLARWEAVE DB] Exception inserting media_asset ${media.id}:`, err?.message);
+    }
+  }
+
+  return media;
+}
+
+export async function getMedia(type?: string): Promise<MediaAsset[]> {
+  if (supabase) {
+    try {
+      let query = supabase.from('media_assets').select('*').order('created_at', { ascending: false });
+      if (type) {
+        query = query.eq('type', type);
+      }
+      const { data, error } = await query;
+      if (!error && data && data.length > 0) {
+        const dbIds = new Set(data.map((m) => m.id));
+        const extraMem = memoryStore.media.filter(
+          (m) => !dbIds.has(m.id) && (!type || m.type === type)
+        );
+        return [...data, ...extraMem];
+      }
+    } catch (err: any) {
+      console.warn('[POLARWEAVE DB] Error fetching media_assets:', err?.message);
+    }
+  }
+
+  let list = [...memoryStore.media];
+  if (type) list = list.filter((m) => m.type === type);
+  return list;
+}
+
+export async function getMediaById(id: string): Promise<MediaAsset | null> {
+  if (supabase) {
+    try {
+      const { data, error } = await supabase.from('media_assets').select('*').eq('id', id).single();
+      if (!error && data) {
+        return data as MediaAsset;
+      }
+    } catch (err: any) {
+      console.warn(`[POLARWEAVE DB] Error fetching media ${id}:`, err?.message);
+    }
+  }
+
+  return memoryStore.media.find((m) => m.id === id) || null;
+}
+
+// -------------------------------------------------------------
+// 6. OBSERVATIONS (STRUCTURED KNOWLEDGE) PERSISTENCE
+// -------------------------------------------------------------
+export async function createObservation(obs: Observation): Promise<Observation> {
+  memoryStore.observations.unshift(obs);
+
+  if (supabase) {
+    try {
+      let expeditionId: string | null = obs.expedition_id || null;
+      if (expeditionId) {
+        const { data: expMatch } = await supabase
+          .from('expeditions')
+          .select('id')
+          .eq('id', expeditionId)
+          .maybeSingle();
+        if (!expMatch) expeditionId = null;
+      }
+
+      let locationId: string | null = obs.location_id || null;
+      if (locationId) {
+        const { data: locMatch } = await supabase
+          .from('locations')
+          .select('id')
+          .eq('id', locationId)
+          .maybeSingle();
+        if (!locMatch) locationId = null;
+      }
+
+      const { error } = await supabase.from('observations').insert({
+        id: obs.id,
+        expedition_id: expeditionId,
+        title: obs.title,
+        description: obs.description,
+        research_domain: obs.research_domain,
+        observed_at: obs.observed_at || new Date().toISOString(),
+        location_id: locationId,
+        location_name: obs.location_name || 'Bharati Research Station',
+        confidence: obs.confidence || 0.9,
+        confidence_level: obs.confidence_level || 'HIGH',
+        verification_status: obs.verification_status || 'AI_EXTRACTED',
+        created_at: obs.created_at || new Date().toISOString(),
+        demo: false
+      });
+
+      if (error) {
+        console.warn(`[POLARWEAVE DB] Error inserting observation ${obs.id}:`, error.message);
+      }
+    } catch (err: any) {
+      console.warn(`[POLARWEAVE DB] Exception inserting observation ${obs.id}:`, err?.message);
+    }
+  }
+
+  return obs;
+}
+
+export async function createMeasurements(
+  msrs: Array<{
+    id: string;
+    observation_id: string;
+    variable: string;
+    value: number;
+    unit: string;
+    confidence?: number;
+    source_dataset_id?: string;
+    source_row?: number;
+  }>
+): Promise<void> {
+  msrs.forEach((m) => {
+    memoryStore.measurements.unshift({
+      id: m.id,
+      observation_id: m.observation_id,
+      variable: m.variable,
+      value: m.value,
+      unit: m.unit,
+      confidence: m.confidence || 0.95
+    });
+  });
+
+  if (supabase) {
+    try {
+      const records = msrs.map((m) => ({
+        id: m.id,
+        observation_id: m.observation_id,
+        variable: m.variable,
+        value: m.value,
+        unit: m.unit,
+        confidence: m.confidence || 0.95,
+        source_dataset_id: m.source_dataset_id || null,
+        source_row: m.source_row || null
+      }));
+
+      const { error } = await supabase.from('measurements').insert(records);
+      if (error) {
+        console.warn('[POLARWEAVE DB] Error inserting measurements:', error.message);
+      }
+    } catch (err: any) {
+      console.warn('[POLARWEAVE DB] Exception inserting measurements:', err?.message);
+    }
+  }
+}
+
+export async function getObservations(filters?: {
+  domain?: string;
+  status?: string;
+  expedition_id?: string;
+  query?: string;
+}): Promise<Observation[]> {
+  if (supabase) {
+    try {
+      let query = supabase.from('observations').select('*').order('created_at', { ascending: false });
+
+      if (filters?.domain && filters.domain !== 'ALL') {
+        query = query.ilike('research_domain', `%${filters.domain}%`);
+      }
+      if (filters?.status && filters.status !== 'ALL') {
+        query = query.eq('verification_status', filters.status);
+      }
+      if (filters?.expedition_id) {
+        query = query.eq('expedition_id', filters.expedition_id);
+      }
+      if (filters?.query) {
+        query = query.or(`title.ilike.%${filters.query}%,description.ilike.%${filters.query}%`);
+      }
+
+      const { data, error } = await query;
+      if (!error && data && data.length > 0) {
+        // Merge in any in-memory observations that might not have committed
+        const dbObsIds = new Set(data.map((o) => o.id));
+        const extraMemObs = memoryStore.observations.filter((o) => {
+          if (dbObsIds.has(o.id)) return false;
+          if (filters?.domain && filters.domain !== 'ALL' && o.research_domain.toLowerCase() !== filters.domain.toLowerCase()) return false;
+          if (filters?.status && filters.status !== 'ALL' && o.verification_status !== filters.status) return false;
+          if (filters?.expedition_id && o.expedition_id !== filters.expedition_id) return false;
+          if (filters?.query) {
+            const q = filters.query.toLowerCase();
+            if (!o.title.toLowerCase().includes(q) && !o.description.toLowerCase().includes(q)) return false;
+          }
+          return true;
+        });
+
+        return [...data, ...extraMemObs];
+      }
+    } catch (err: any) {
+      console.warn('[POLARWEAVE DB] Error fetching observations:', err?.message);
+    }
+  }
+
+  // Fallback to memoryStore
+  let list = [...memoryStore.observations];
+  if (filters?.domain && filters.domain !== 'ALL') {
+    list = list.filter((o) => o.research_domain.toLowerCase() === filters.domain?.toLowerCase());
+  }
+  if (filters?.status && filters.status !== 'ALL') {
+    list = list.filter((o) => o.verification_status === filters.status);
+  }
+  if (filters?.expedition_id) {
+    list = list.filter((o) => o.expedition_id === filters.expedition_id);
+  }
+  if (filters?.query) {
+    const q = filters.query.toLowerCase();
+    list = list.filter((o) => o.title.toLowerCase().includes(q) || o.description.toLowerCase().includes(q));
+  }
+  return list;
+}
+
+export async function getObservationById(id: string): Promise<any> {
+  if (supabase) {
+    try {
+      const { data: obs, error: obsErr } = await supabase
+        .from('observations')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle();
+
+      if (!obsErr && obs) {
+        const { data: msrs } = await supabase
+          .from('measurements')
+          .select('*')
+          .eq('observation_id', id);
+
+        const { data: evidence } = await supabase
+          .from('evidence_links')
+          .select('*')
+          .eq('knowledge_id', id);
+
+        const { data: rels } = await supabase
+          .from('knowledge_relationships')
+          .select('*')
+          .or(`source_entity_id.eq.${id},target_entity_id.eq.${id}`);
+
+        return {
+          ...obs,
+          measurements: msrs || [],
+          evidence: evidence || [],
+          relationships: rels || []
+        };
+      }
+    } catch (err: any) {
+      console.warn(`[POLARWEAVE DB] Error fetching observation ${id}:`, err?.message);
+    }
+  }
+
+  const observation = memoryStore.observations.find((o) => o.id === id);
+  if (!observation) return null;
+
+  const measurements = memoryStore.measurements.filter((m) => m.observation_id === id);
+  const evidence = memoryStore.evidenceLinks.filter((e) => e.knowledge_id === id);
+  const relationships = memoryStore.relationships.filter(
+    (r) => r.source_entity_id === id || r.target_entity_id === id
+  );
+
+  return {
+    ...observation,
+    measurements,
+    evidence,
+    relationships
+  };
+}
+
+// -------------------------------------------------------------
+// 7. EVIDENCE LINKS PERSISTENCE
+// -------------------------------------------------------------
+export async function createEvidenceLinks(links: EvidenceLink[]): Promise<void> {
+  for (const link of links) {
+    memoryStore.evidenceLinks.unshift(link);
+  }
+
+  if (supabase) {
+    try {
+      const records = links.map((l) => ({
+        id: l.id,
+        knowledge_type: l.knowledge_type || 'observation',
+        knowledge_id: l.knowledge_id,
+        source_type: l.source_type,
+        source_id: l.source_id,
+        source_title: l.source_title,
+        page_number: l.page_number || null,
+        row_number: l.row_number || null,
+        timestamp_start: l.timestamp_start || null,
+        timestamp_end: l.timestamp_end || null,
+        excerpt: l.excerpt || 'Source evidence excerpt',
+        media_url: l.media_url || null,
+        confidence: l.confidence || 0.9,
+        verification_status: l.verification_status || 'AI_EXTRACTED',
+        created_at: l.created_at || new Date().toISOString()
+      }));
+
+      const { error } = await supabase.from('evidence_links').insert(records);
+      if (error) {
+        console.warn('[POLARWEAVE DB] Error inserting evidence_links:', error.message);
+      }
+    } catch (err: any) {
+      console.warn('[POLARWEAVE DB] Exception inserting evidence_links:', err?.message);
+    }
+  }
+}
+
+export async function getEvidenceByKnowledgeId(knowledgeId: string): Promise<any> {
+  let links: EvidenceLink[] = [];
+  let observation: any = null;
+
+  if (supabase) {
+    try {
+      const { data: dbLinks, error: linkErr } = await supabase
+        .from('evidence_links')
+        .select('*')
+        .eq('knowledge_id', knowledgeId);
+
+      if (!linkErr && dbLinks && dbLinks.length > 0) {
+        links = dbLinks as EvidenceLink[];
+      }
+
+      const { data: dbObs } = await supabase
+        .from('observations')
+        .select('*')
+        .eq('id', knowledgeId)
+        .maybeSingle();
+
+      if (dbObs) observation = dbObs;
+    } catch (err: any) {
+      console.warn(`[POLARWEAVE DB] Error fetching evidence for ${knowledgeId}:`, err?.message);
+    }
+  }
+
+  // Fallback to memoryStore if DB returned nothing
+  if (links.length === 0) {
+    links = memoryStore.evidenceLinks.filter((e) => e.knowledge_id === knowledgeId);
+  }
+  if (!observation) {
+    observation = memoryStore.observations.find((o) => o.id === knowledgeId);
+  }
+
+  const grouped = {
+    reports: links.filter((l) => l.source_type === 'pdf' || l.source_type === 'docx'),
+    datasets: links.filter((l) => l.source_type === 'dataset'),
+    videos: links.filter((l) => l.source_type === 'video'),
+    images: links.filter((l) => l.source_type === 'image'),
+    field_notes: links.filter((l) => l.source_type === 'field_note')
+  };
+
+  return {
+    knowledge_id: knowledgeId,
+    knowledge_title: observation?.title || 'Scientific Knowledge Fact',
+    confidence: observation?.confidence || 0.94,
+    verification_status: observation?.verification_status || 'VERIFIED',
+    total_sources: links.length,
+    evidence_chain: links,
+    grouped_sources: grouped
+  };
+}
+
+// -------------------------------------------------------------
+// 8. KNOWLEDGE RELATIONSHIPS PERSISTENCE
+// -------------------------------------------------------------
+export async function createKnowledgeRelationships(
+  relationships: KnowledgeRelationship[]
+): Promise<void> {
+  for (const rel of relationships) {
+    memoryStore.relationships.unshift(rel);
+  }
+
+  if (supabase) {
+    try {
+      const records = relationships.map((r) => ({
+        id: r.id,
+        source_entity_type: r.source_entity_type,
+        source_entity_id: r.source_entity_id,
+        target_entity_type: r.target_entity_type,
+        target_entity_id: r.target_entity_id,
+        relationship_type: r.relationship_type,
+        label: r.label || null,
+        confidence: r.confidence || 0.9,
+        status: r.status || 'suggested',
+        created_at: r.created_at || new Date().toISOString()
+      }));
+
+      const { error } = await supabase.from('knowledge_relationships').insert(records);
+      if (error) {
+        console.warn('[POLARWEAVE DB] Error inserting knowledge_relationships:', error.message);
+      }
+    } catch (err: any) {
+      console.warn('[POLARWEAVE DB] Exception inserting knowledge_relationships:', err?.message);
+    }
+  }
+}
+
+export async function getKnowledgeGraphData(): Promise<{ nodes: any[]; edges: any[] }> {
+  const nodes: Array<{
+    id: string;
+    type: string;
+    data: Record<string, unknown>;
+    position: { x: number; y: number };
+  }> = [];
+
+  const edges: Array<{
+    id: string;
+    source: string;
+    target: string;
+    label?: string;
+    animated?: boolean;
+    style?: Record<string, unknown>;
+  }> = [];
+
+  // Expeditions
+  memoryStore.expeditions.forEach((exp, idx) => {
+    nodes.push({
+      id: exp.id,
+      type: 'expedition',
+      data: { title: exp.title, code: exp.code, region: exp.region, status: exp.status },
+      position: { x: 350 + idx * 300, y: 50 }
+    });
+  });
+
+  // Locations
+  memoryStore.locations.forEach((loc, idx) => {
+    nodes.push({
+      id: loc.id,
+      type: 'location',
+      data: {
+        title: loc.name,
+        region: loc.region,
+        station: loc.station,
+        coordinates: `${loc.latitude}, ${loc.longitude}`
+      },
+      position: { x: 100 + idx * 220, y: 220 }
+    });
+  });
+
+  // Fetch persisted observations & datasets & media
+  const observations = await getObservations();
+  observations.forEach((obs, idx) => {
+    nodes.push({
+      id: obs.id,
+      type: 'observation',
+      data: {
+        title: obs.title,
+        domain: obs.research_domain,
+        confidence: obs.confidence,
+        status: obs.verification_status
+      },
+      position: { x: 150 + idx * 240, y: 380 }
+    });
+  });
+
+  const datasets = await getDatasets();
+  datasets.forEach((dts, idx) => {
+    nodes.push({
+      id: dts.id,
+      type: 'dataset',
+      data: { title: dts.title, filename: dts.filename, rows: dts.row_count },
+      position: { x: 200 + idx * 280, y: 540 }
+    });
+  });
+
+  const media = await getMedia();
+  media.forEach((med, idx) => {
+    nodes.push({
+      id: med.id,
+      type: 'media',
+      data: { title: med.filename, type: med.type, caption: med.ai_analysis_json?.caption },
+      position: { x: 500 + idx * 260, y: 540 }
+    });
+  });
+
+  // Fetch relationships
+  let rels = [...memoryStore.relationships];
+  if (supabase) {
+    try {
+      const { data: dbRels, error } = await supabase.from('knowledge_relationships').select('*');
+      if (!error && dbRels && dbRels.length > 0) {
+        const dbRelIds = new Set(dbRels.map((r) => r.id));
+        const extraMem = memoryStore.relationships.filter((r) => !dbRelIds.has(r.id));
+        rels = [...dbRels, ...extraMem];
+      }
+    } catch (err: any) {
+      console.warn('[POLARWEAVE DB] Error fetching relationships:', err?.message);
+    }
+  }
+
+  rels.forEach((rel) => {
+    edges.push({
+      id: rel.id,
+      source: rel.source_entity_id,
+      target: rel.target_entity_id,
+      label: rel.label || rel.relationship_type,
+      style: { stroke: '#94A3B8', strokeWidth: 1.5 },
+      animated: rel.status === 'suggested'
+    });
+  });
+
+  return { nodes, edges };
+}
+
+// -------------------------------------------------------------
+// 9. HUMAN REVIEW & VERIFICATION AUDIT TRAIL PERSISTENCE
+// -------------------------------------------------------------
+export async function reviewKnowledgeEntity(
+  entityType: string,
+  id: string,
+  action: 'approve' | 'reject' | 'edit',
+  payload: {
+    reviewer_id?: string;
+    reviewer_name?: string;
+    notes?: string;
+    edited_data?: any;
+  }
+): Promise<{ updated_entity: any; audit_record: any }> {
+  if (entityType !== 'observation') {
+    throw new Error(`Review for ${entityType} is not currently supported.`);
+  }
+
+  const newStatus = action === 'reject' ? 'REJECTED' : 'VERIFIED';
+
+  // 1. Fetch previous state
+  let previousValue: any = null;
+  const memObsIdx = memoryStore.observations.findIndex((o) => o.id === id);
+  if (memObsIdx !== -1) {
+    previousValue = { ...memoryStore.observations[memObsIdx] };
+  }
+
+  let updatedEntity: any = null;
+
+  // 2. Update PostgreSQL observations table
+  if (supabase) {
+    try {
+      if (!previousValue) {
+        const { data: dbPrev } = await supabase
+          .from('observations')
+          .select('*')
+          .eq('id', id)
+          .maybeSingle();
+        if (dbPrev) previousValue = dbPrev;
+      }
+
+      const updateData: any = {
+        verification_status: newStatus
+      };
+
+      if (action === 'edit' && payload.edited_data) {
+        if (payload.edited_data.title) updateData.title = payload.edited_data.title;
+        if (payload.edited_data.description) updateData.description = payload.edited_data.description;
+        if (payload.edited_data.research_domain) updateData.research_domain = payload.edited_data.research_domain;
+        if (payload.edited_data.location_name) updateData.location_name = payload.edited_data.location_name;
+      }
+
+      const { data: dbUpdated, error: updateErr } = await supabase
+        .from('observations')
+        .update(updateData)
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (!updateErr && dbUpdated) {
+        updatedEntity = dbUpdated;
+      }
+
+      // Also update linked evidence status in DB
+      await supabase
+        .from('evidence_links')
+        .update({ verification_status: newStatus })
+        .eq('knowledge_id', id);
+
+      // 3. Create verification_records row in PostgreSQL
+      const auditId = `ver_${uuidv4().slice(0, 8)}`;
+      const { error: verErr } = await supabase.from('verification_records').insert({
+        id: auditId,
+        entity_type: 'observation',
+        entity_id: id,
+        reviewer_id: null, // Set null to respect profiles(id) foreign key constraint
+        reviewer_name: payload.reviewer_name || 'Dr. Rajesh Sharma',
+        status: action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : 'edited',
+        notes: payload.notes || 'Reviewed via POLARWEAVE verification workflow',
+        previous_value: previousValue || {},
+        new_value: updatedEntity || previousValue || {},
+        reviewed_at: new Date().toISOString()
+      });
+
+      if (verErr) {
+        console.warn(`[POLARWEAVE DB] Error inserting verification_record:`, verErr.message);
+      }
+    } catch (err: any) {
+      console.warn(`[POLARWEAVE DB] Exception updating review state:`, err?.message);
+    }
+  }
+
+  // 4. Update memoryStore in tandem
+  if (memObsIdx !== -1) {
+    if (action === 'approve') {
+      memoryStore.observations[memObsIdx].verification_status = 'VERIFIED';
+    } else if (action === 'reject') {
+      memoryStore.observations[memObsIdx].verification_status = 'REJECTED';
+    } else if (action === 'edit' && payload.edited_data) {
+      memoryStore.observations[memObsIdx] = {
+        ...memoryStore.observations[memObsIdx],
+        ...payload.edited_data,
+        verification_status: 'VERIFIED'
+      };
+    }
+    updatedEntity = memoryStore.observations[memObsIdx];
+
+    memoryStore.evidenceLinks
+      .filter((e) => e.knowledge_id === id)
+      .forEach((e) => {
+        e.verification_status = newStatus;
+      });
+  }
+
+  const auditRecord = {
+    id: `ver_${uuidv4().slice(0, 8)}`,
+    entity_type: 'observation' as const,
+    entity_id: id,
+    reviewer_id: payload.reviewer_id || 'usr_researcher_sharma',
+    reviewer_name: payload.reviewer_name || 'Dr. Rajesh Sharma',
+    status: action === 'approve' ? ('approved' as const) : action === 'reject' ? ('rejected' as const) : ('edited' as const),
+    notes: payload.notes || 'Reviewed via POLARWEAVE verification workflow',
+    previous_value: previousValue,
+    new_value: updatedEntity,
+    reviewed_at: new Date().toISOString()
+  };
+
+  return {
+    updated_entity: updatedEntity,
+    audit_record: auditRecord
+  };
+}
+
+// -------------------------------------------------------------
+// 10. GENERATED OUTREACH PERSISTENCE
+// -------------------------------------------------------------
+export async function saveGeneratedContent(content: GeneratedContent): Promise<GeneratedContent> {
+  memoryStore.outreach.unshift(content);
+
+  if (supabase) {
+    try {
+      const { error } = await supabase.from('generated_content').insert({
+        id: content.id,
+        source_knowledge_ids: content.source_knowledge_ids || [],
+        content_type: content.content_type,
+        audience: content.audience,
+        tone: content.tone,
+        title: content.title,
+        content: content.content,
+        summary: content.summary,
+        citations: content.citations || [],
+        status: content.status || 'draft',
+        created_at: content.created_at || new Date().toISOString()
+      });
+
+      if (error) {
+        console.warn(`[POLARWEAVE DB] Error inserting generated_content:`, error.message);
+      }
+    } catch (err: any) {
+      console.warn(`[POLARWEAVE DB] Exception inserting generated_content:`, err?.message);
+    }
+  }
+
+  return content;
+}
+
+export async function getGeneratedContent(): Promise<GeneratedContent[]> {
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('generated_content')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!error && data && data.length > 0) {
+        const dbIds = new Set(data.map((c) => c.id));
+        const extraMem = memoryStore.outreach.filter((c) => !dbIds.has(c.id));
+        return [...data, ...extraMem];
+      }
+    } catch (err: any) {
+      console.warn('[POLARWEAVE DB] Error fetching generated_content:', err?.message);
+    }
+  }
+
+  return memoryStore.outreach;
+}
