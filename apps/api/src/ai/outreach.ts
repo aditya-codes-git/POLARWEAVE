@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { env, hasGemini } from '../config/env.js';
+import { env, hasGemini, hasGroq } from '../config/env.js';
+import { callGroqChat } from './groq.js';
 import {
   Observation,
   EvidenceLink,
@@ -91,7 +92,58 @@ CONTENT:
         };
       }
     } catch (err) {
-      console.warn('[POLARWEAVE OUTREACH] AI generation encountered issue, switching to high-fidelity template engine:', err);
+      console.warn('[POLARWEAVE OUTREACH] Gemini generation issue:', err);
+    }
+  }
+
+  // If Groq is available, generate audience-calibrated content with citations
+  if (hasGroq && verifiedObservations.length > 0) {
+    try {
+      const prompt = `
+Create a ${req.content_type} targeted at ${req.audience} audience with a ${req.tone} tone.
+
+VERIFIED SOURCE OBSERVATIONS:
+${verifiedObservations.map(o => `- ${o.title}: ${o.description} (${o.research_domain} at ${o.location_name})`).join('\n')}
+
+EVIDENCE CITATIONS:
+${citations.map(c => `${c.citation_label}: ${c.source_title} (${c.page_or_row_or_time}) - "${c.excerpt}"`).join('\n')}
+
+Format your response as:
+TITLE: <Compelling headline suitable for audience>
+SUMMARY: <2-3 sentence overview>
+CONTENT:
+<Full multi-paragraph text with embedded citation markers [1], [2], etc.>
+`;
+      const text = await callGroqChat([
+        {
+          role: 'system',
+          content: 'You are the POLARWEAVE Science Outreach Specialist for MoES & NCPOR. Transform verified polar research into audience-targeted communication. Include citation markers like [1], [2], [3] that match the provided sources directly in the text whenever a scientific fact, measurement, or location is mentioned.'
+        },
+        { role: 'user', content: prompt }
+      ], { temperature: 0.3 });
+
+      const titleMatch = text.match(/TITLE:\s*(.+)/i);
+      const summaryMatch = text.match(/SUMMARY:\s*([\s\S]+?)(?=CONTENT:|$)/i);
+      const contentMatch = text.match(/CONTENT:\s*([\s\S]+)/i);
+
+      if (titleMatch && contentMatch) {
+        console.log('[POLARWEAVE OUTREACH] Generated outreach via Groq');
+        return {
+          id: `out_${uuidv4().slice(0, 8)}`,
+          source_knowledge_ids: req.source_knowledge_ids,
+          content_type: req.content_type,
+          audience: req.audience,
+          tone: req.tone,
+          title: titleMatch[1].trim(),
+          summary: summaryMatch ? summaryMatch[1].trim() : 'Verified polar scientific communication.',
+          content: contentMatch[1].trim(),
+          citations,
+          status: 'draft',
+          created_at: new Date().toISOString()
+        };
+      }
+    } catch (groqErr) {
+      console.warn('[POLARWEAVE OUTREACH] Groq generation issue, switching to high-fidelity template engine:', groqErr);
     }
   }
 

@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { env, hasGemini } from '../config/env.js';
+import { env, hasGemini, hasGroq } from '../config/env.js';
+import { callGroqChat } from './groq.js';
 import {
   ScientificStructuringOutput,
   ScientificStructuringOutputSchema
@@ -85,7 +86,62 @@ Required JSON format:
       const validated = ScientificStructuringOutputSchema.parse(parsed);
       return validated;
     } catch (err) {
-      console.warn('[POLARWEAVE AI] Gemini processing encountered error or validation issue, falling back to deterministic extraction:', err);
+      console.warn('[POLARWEAVE AI] Gemini processing encountered error or validation issue:', err);
+    }
+  }
+
+  // If Groq is available, try fast Llama 3.3 70B inference
+  if (hasGroq) {
+    try {
+      const prompt = `
+Extract structured polar science knowledge from the following document material:
+Filename: ${filename}
+
+Document Excerpt:
+${rawContent.slice(0, 12000)}
+
+${pageContext && pageContext.length > 0 ? `Page Breakdowns:\n${pageContext.slice(0, 5).map(p => `[Page ${p.pageNumber}]: ${p.text.slice(0, 500)}`).join('\n')}` : ''}
+
+Required JSON format:
+{
+  "title": string,
+  "content_type": string,
+  "expedition": string or null,
+  "locations": [{"value": string, "confidence": number, "source_reference": string, "page_number": number}],
+  "researchers": [{"value": string, "confidence": number, "source_reference": string}],
+  "research_domains": string[],
+  "observations": [
+    {
+      "title": string,
+      "description": string,
+      "research_domain": "Glaciology" | "Oceanography" | "Atmospheric Sciences" | "Biology & Ecology" | "Geology & Geophysics" | "Meteorology" | "Cryosphere Dynamics",
+      "observed_at": string (ISO date or null),
+      "location": string,
+      "measurements": [{"variable": string, "value": number, "unit": string}],
+      "confidence": number,
+      "source_reference": string,
+      "page_number": number,
+      "excerpt": string
+    }
+  ],
+  "datasets": [{"title": string, "variables": string[], "unit_summary": string, "row_estimate": number}],
+  "publications": string[],
+  "media_references": string[],
+  "activities": string[],
+  "summary": string
+}
+`;
+      const textResponse = await callGroqChat([
+        { role: 'system', content: SYSTEM_INSTRUCTION },
+        { role: 'user', content: prompt }
+      ], { jsonMode: true, temperature: 0.1 });
+
+      const parsed = JSON.parse(textResponse);
+      const validated = ScientificStructuringOutputSchema.parse(parsed);
+      console.log('[POLARWEAVE AI] Successfully structured document using Groq Llama 3.3 70B');
+      return validated;
+    } catch (groqErr) {
+      console.warn('[POLARWEAVE AI] Groq processing error, falling back to deterministic extraction:', groqErr);
     }
   }
 

@@ -103,15 +103,33 @@ export function SettingsPage() {
               <Sparkles className="w-5 h-5 text-polar-600" />
               <div>
                 <span className="text-xs font-semibold text-slate-900 block">
-                  Google Gemini AI Structuring Engine
+                  Google Gemini Multimodal AI Engine
                 </span>
                 <span className="text-[11px] text-slate-400 font-mono">
-                  Structured Zod Schema Validation Active
+                  Multimodal Extraction & Scientific JSON Structuring
                 </span>
               </div>
             </div>
             <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-polar-50 text-polar-700 border border-polar-200">
-              Operational (Dual Mode)
+              Operational
+            </span>
+          </div>
+
+          {/* Groq AI */}
+          <div className="p-4 bg-slate-50 rounded-xl border border-slate-200/80 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Sparkles className="w-5 h-5 text-amber-600" />
+              <div>
+                <span className="text-xs font-semibold text-slate-900 block">
+                  Groq Ultra-Fast LPU Engine (Llama 3.3 70B)
+                </span>
+                <span className="text-[11px] text-slate-400 font-mono">
+                  Sub-second Outreach Generation & Knowledge Synthesis
+                </span>
+              </div>
+            </div>
+            <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">
+              Operational
             </span>
           </div>
         </div>

@@ -55,12 +55,12 @@ ON CONFLICT (id) DO NOTHING;
 -- 5. DATASETS
 INSERT INTO public.datasets (id, title, filename, file_path, source_document_id, row_count, column_count, schema_json, preview_data, processing_status, region, expedition_id)
 VALUES
-('dts_ice_measurements', 'ice_measurements_larsemann.csv', 'ice_measurements_larsemann.csv', 'doc_exp45_report', 1420, 6,
+('dts_ice_measurements', 'In-situ Fast-Ice Measurements — Larsemann Hills', 'ice_measurements_larsemann.csv', 'datasets/ice_measurements_larsemann.csv', 'doc_exp45_report', 1420, 6,
  '[{"name": "timestamp", "datatype": "date"}, {"name": "core_id", "datatype": "string"}, {"name": "depth_m", "datatype": "numeric", "unit": "m"}, {"name": "ice_thickness_m", "datatype": "numeric", "unit": "m"}, {"name": "density_kg_m3", "datatype": "numeric", "unit": "kg/m3"}, {"name": "temp_c", "datatype": "numeric", "unit": "°C"}]'::jsonb,
  '[{"core_id": "IC-45-01", "depth_m": 0.5, "ice_thickness_m": 1.82, "density_kg_m3": 912, "temp_c": -12.4}, {"core_id": "IC-45-02", "depth_m": 1.0, "ice_thickness_m": 1.80, "density_kg_m3": 914, "temp_c": -13.1}, {"core_id": "IC-45-42", "depth_m": 21.0, "ice_thickness_m": 1.80, "density_kg_m3": 918, "temp_c": -14.8}]'::jsonb,
  'completed', 'Antarctica', 'exp_45_ant'),
 
-('dts_prydz_ctd', 'prydz_bay_hydrography_ctd.csv', 'prydz_bay_hydrography_ctd.csv', 'doc_exp45_report', 850, 5,
+('dts_prydz_ctd', 'Prydz Bay Hydrography CTD Casts', 'prydz_bay_hydrography_ctd.csv', 'datasets/prydz_bay_hydrography_ctd.csv', 'doc_exp45_report', 850, 5,
  '[{"name": "cast_id", "datatype": "string"}, {"name": "depth_m", "datatype": "numeric"}, {"name": "temp_c", "datatype": "numeric"}, {"name": "salinity_psu", "datatype": "numeric"}, {"name": "dissolved_o2_umol_kg", "datatype": "numeric"}]'::jsonb,
  '[{"cast_id": "CTD-01", "depth_m": 10, "temp_c": -1.2, "salinity_psu": 34.1, "dissolved_o2_umol_kg": 320}, {"cast_id": "CTD-01", "depth_m": 150, "temp_c": 0.4, "salinity_psu": 34.6, "dissolved_o2_umol_kg": 245}]'::jsonb,
  'completed', 'Antarctica', 'exp_45_ant')

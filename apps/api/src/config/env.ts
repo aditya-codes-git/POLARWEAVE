@@ -9,12 +9,15 @@ const envSchema = z.object({
   CLIENT_URL: z.string().default('http://localhost:5173'),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   
-  // Supabase (optional for demo mode)
+  // Supabase (supports service role, publishable key, or legacy anon key)
   SUPABASE_URL: z.string().optional().default(''),
   SUPABASE_SERVICE_ROLE_KEY: z.string().optional().default(''),
+  SUPABASE_ANON_KEY: z.string().optional().default(''),
+  SUPABASE_PUBLISHABLE_KEY: z.string().optional().default(''),
   
-  // Gemini AI (optional for demo mode)
+  // AI Engines (Gemini and Groq)
   GEMINI_API_KEY: z.string().optional().default(''),
+  GROQ_API_KEY: z.string().optional().default(''),
   
   // Processing limits
   MAX_UPLOAD_SIZE_MB: z.string().default('100').transform((v) => parseInt(v, 10)),
@@ -23,5 +26,7 @@ const envSchema = z.object({
 
 export const env = envSchema.parse(process.env);
 
-export const hasSupabase = Boolean(env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY);
+export const supabaseKey = env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_ANON_KEY || env.SUPABASE_PUBLISHABLE_KEY;
+export const hasSupabase = Boolean(env.SUPABASE_URL && supabaseKey);
 export const hasGemini = Boolean(env.GEMINI_API_KEY);
+export const hasGroq = Boolean(env.GROQ_API_KEY);

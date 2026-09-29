@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { env, hasSupabase } from '../config/env.js';
+import { env, hasSupabase, supabaseKey } from '../config/env.js';
 import {
   DEMO_EXPEDITIONS,
   DEMO_LOCATIONS,
@@ -16,9 +16,9 @@ import {
 
 export let supabase: SupabaseClient | null = null;
 
-if (hasSupabase) {
+if (hasSupabase && supabaseKey) {
   try {
-    supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
+    supabase = createClient(env.SUPABASE_URL, supabaseKey, {
       auth: { persistSession: false }
     });
     console.log('[POLARWEAVE] Connected to Supabase infrastructure at', env.SUPABASE_URL);
