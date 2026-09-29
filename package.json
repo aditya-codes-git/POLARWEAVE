@@ -1,0 +1,21 @@
+{
+  "name": "polarweave",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Integrated Polar Science Outreach, Knowledge Repository and Media Dissemination Portal (SIH26063)",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -k -p \"[{name}]\" -n \"API,WEB\" -c \"cyan,blue\" \"npm run dev:api\" \"npm run dev:web\"",
+    "dev:web": "npm run --workspace=@polarweave/web dev",
+    "dev:api": "npm run --workspace=@polarweave/api dev",
+    "build": "npm run --workspace=@polarweave/types build && npm run --workspaces --if-present build",
+    "lint": "npm run --workspaces --if-present lint",
+    "test": "npm run --workspaces --if-present test"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
