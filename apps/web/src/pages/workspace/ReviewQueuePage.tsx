@@ -14,8 +14,11 @@ import { getObservations } from '../../lib/api';
 import { Observation } from '@polarweave/types';
 import { VerificationBadge, ConfidenceBadge, DomainBadge } from '../../components/ui/badges';
 
+import { useRole } from '../../context/RoleContext';
+
 export function ReviewQueuePage() {
   const navigate = useNavigate();
+  const { role } = useRole();
   const [observations, setObservations] = useState<Observation[]>([]);
   const [filter, setFilter] = useState<'all' | 'needs_review' | 'verified'>('all');
 
@@ -29,28 +32,40 @@ export function ReviewQueuePage() {
     return true;
   });
 
+  const isAdmin = role === 'admin';
+
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1.5">
-            <span className="text-[11px] font-mono uppercase tracking-wider font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-              Human-In-The-Loop
+            <span
+              className={`text-[11px] font-mono uppercase tracking-wider font-semibold px-2 py-0.5 rounded border ${
+                isAdmin
+                  ? 'text-purple-700 bg-purple-50 border-purple-200'
+                  : 'text-amber-700 bg-amber-50 border-amber-200'
+              }`}
+            >
+              {isAdmin ? 'NCPOR Institutional Governance' : 'Author Peer Verification'}
             </span>
             <span className="text-xs text-slate-400">•</span>
-            <span className="text-xs text-slate-500">Scientific Verification Queue</span>
+            <span className="text-xs text-slate-500 font-mono">
+              {isAdmin ? 'INSTITUTIONAL REVIEW QUEUE' : 'MY SUBMISSIONS'}
+            </span>
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-            Verification Queue
+            {isAdmin ? 'Institutional Review Queue' : 'My Submissions Review'}
           </h1>
           <p className="text-xs text-slate-500 mt-1">
-            Review and sign-off on AI-structured polar observations and linked evidence before publication.
+            {isAdmin
+              ? 'Institution-wide verification queue. Sign-off on researcher findings before institutional archiving and public dissemination.'
+              : 'Inspect and sign-off on AI-structured polar observations extracted from your uploaded field materials.'}
           </p>
         </div>
 
         {/* Filter Pills */}
-        <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-slate-200 shadow-subtle">
+        <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-slate-200 shadow-subtle shrink-0">
           {(['all', 'needs_review', 'verified'] as const).map((f) => (
             <button
               key={f}
@@ -65,6 +80,35 @@ export function ReviewQueuePage() {
             </button>
           ))}
         </div>
+      </div>
+
+      {/* Role-Specific Metric Summary Pill (Section 22) */}
+      <div className="flex items-center gap-3 text-xs font-mono">
+        {isAdmin ? (
+          <>
+            <span className="px-3 py-1 rounded-lg bg-amber-50 text-amber-800 border border-amber-200 font-semibold">
+              8 Awaiting Verification
+            </span>
+            <span className="px-3 py-1 rounded-lg bg-slate-100 text-slate-700 border border-slate-200">
+              3 Flagged for Clarification
+            </span>
+            <span className="px-3 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200">
+              14 Recently Verified
+            </span>
+          </>
+        ) : (
+          <>
+            <span className="px-3 py-1 rounded-lg bg-slate-100 text-slate-700 border border-slate-200">
+              3 Processing
+            </span>
+            <span className="px-3 py-1 rounded-lg bg-amber-50 text-amber-800 border border-amber-200 font-semibold">
+              1 Needs My Review
+            </span>
+            <span className="px-3 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200">
+              12 Verified Submissions
+            </span>
+          </>
+        )}
       </div>
 
       {/* Observation Cards */}
