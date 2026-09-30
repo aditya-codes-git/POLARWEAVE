@@ -85,7 +85,7 @@ function getInitialCustomUser(): UserProfile | null {
     const saved = localStorage.getItem('polarweave_user');
     if (saved) {
       const parsed = JSON.parse(saved);
-      if (parsed?.avatar_url || parsed?.email?.includes('@gmail.com') || parsed?.id?.length > 25) {
+      if (parsed?.id && parsed?.email) {
         return parsed;
       }
     }
@@ -94,6 +94,7 @@ function getInitialCustomUser(): UserProfile | null {
   }
   return null;
 }
+
 
 export function RoleProvider({ children }: { children: ReactNode }) {
   const [role, setRoleState] = useState<UserRole>(getInitialRole);
@@ -203,9 +204,25 @@ export function RoleProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const user = customUser && customUser.role === role
-    ? customUser
+  const user = customUser
+    ? {
+        ...customUser,
+        role,
+        roleLabel:
+          role === 'admin'
+            ? 'Knowledge Admin'
+            : role === 'public'
+            ? 'Public Explorer'
+            : 'Researcher',
+        badgeLabel:
+          role === 'admin'
+            ? 'KNOWLEDGE ADMIN'
+            : role === 'public'
+            ? 'PUBLIC EXPLORER'
+            : 'RESEARCHER'
+      }
     : DEMO_PROFILES[role];
+
 
   const switchRole = (newRole: UserRole) => {
     if (newRole === role) return;

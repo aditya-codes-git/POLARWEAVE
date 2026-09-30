@@ -69,6 +69,12 @@ export async function createProcessingJob(job: ProcessingJob): Promise<Processin
 
   if (supabase) {
     try {
+      const summary = {
+        ...(job.result_summary || {}),
+        created_by: job.created_by || null,
+        created_by_name: job.created_by_name || null
+      };
+
       const { error } = await supabase.from('processing_jobs').insert({
         id: job.id,
         filename: job.filename,
@@ -79,7 +85,7 @@ export async function createProcessingJob(job: ProcessingJob): Promise<Processin
         stages: job.stages,
         progress: job.progress,
         error_message: job.error_message || null,
-        result_summary: job.result_summary || {},
+        result_summary: summary,
         started_at: job.started_at,
         completed_at: job.completed_at || null
       });
@@ -106,7 +112,9 @@ export async function updateProcessingJob(
     ...(current?.result_summary || {}),
     ...(updates.result_summary || {}),
     ...(updates.title !== undefined ? { package_title: updates.title } : {}),
-    ...(updates.original_filename !== undefined ? { original_filename: updates.original_filename } : {})
+    ...(updates.original_filename !== undefined ? { original_filename: updates.original_filename } : {}),
+    ...(updates.created_by !== undefined ? { created_by: updates.created_by } : {}),
+    ...(updates.created_by_name !== undefined ? { created_by_name: updates.created_by_name } : {})
   };
 
   const updatedObj: ProcessingJob = {
@@ -115,6 +123,8 @@ export async function updateProcessingJob(
     id,
     title: updates.title !== undefined ? updates.title : current?.title,
     original_filename: updates.original_filename !== undefined ? updates.original_filename : (current?.original_filename || current?.filename),
+    created_by: updates.created_by !== undefined ? updates.created_by : current?.created_by,
+    created_by_name: updates.created_by_name !== undefined ? updates.created_by_name : current?.created_by_name,
     result_summary: mergedSummary
   };
 
@@ -147,7 +157,7 @@ export async function updateProcessingJob(
   return updatedObj;
 }
 
-export async function getProcessingJobs(): Promise<ProcessingJob[]> {
+export async function getProcessingJobs(userId?: string, role?: string): Promise<ProcessingJob[]> {
   if (supabase) {
     try {
       const { data, error } = await supabase
@@ -156,19 +166,33 @@ export async function getProcessingJobs(): Promise<ProcessingJob[]> {
         .order('started_at', { ascending: false });
 
       if (!error && data) {
-        return data.map((j: any) => ({
+        let mapped = data.map((j: any) => ({
           ...j,
+          created_by: j.result_summary?.created_by || j.created_by,
+          created_by_name: j.result_summary?.created_by_name || j.created_by_name,
           title: j.result_summary?.package_title || j.title || j.filename,
           original_filename: j.result_summary?.original_filename || j.original_filename || j.filename
         }));
+
+        // If caller is a researcher, only return jobs owned by this researcher
+        if (role === 'researcher' && userId) {
+          mapped = mapped.filter((j: any) => j.created_by === userId);
+        }
+
+        return mapped;
       }
     } catch (err: any) {
       console.warn('[POLARWEAVE DB] Error fetching processing_jobs:', err?.message);
     }
   }
 
-  return memoryStore.jobs;
+  let memJobs = memoryStore.jobs;
+  if (role === 'researcher' && userId) {
+    memJobs = memJobs.filter((j) => j.created_by === userId);
+  }
+  return memJobs;
 }
+
 
 export async function getProcessingJobById(id: string): Promise<ProcessingJob | null> {
   if (supabase) {
@@ -739,8 +763,9 @@ export async function getObservations(filters?: {
   query?: string;
   job_id?: string;
   scope?: 'real' | 'demo' | 'all';
+  created_by?: string;
 }): Promise<Observation[]> {
-  const isRealScope = filters?.scope === 'real' || Boolean(filters?.job_id);
+  const isRealScope = filters?.scope === 'real' || Boolean(filters?.job_id) || Boolean(filters?.created_by);
 
   if (supabase) {
     try {
@@ -748,6 +773,9 @@ export async function getObservations(filters?: {
 
       if (filters?.job_id) {
         query = query.eq('processing_job_id', filters.job_id);
+      }
+      if (filters?.created_by) {
+        query = query.eq('created_by', filters.created_by);
       }
       if (filters?.scope === 'real') {
         query = query.eq('demo', false);
@@ -770,12 +798,12 @@ export async function getObservations(filters?: {
 
       const { data, error } = await query;
       if (!error && data) {
-        // If not explicitly requesting demo data, strictly return actual database records
-        if (filters?.scope !== 'demo') {
+        // If caller is scoped to a specific owner or real data, strictly return DB records
+        if (filters?.created_by || filters?.scope !== 'demo') {
           return data;
         }
 
-        // Only for explicit demo scope, merge memory demo items if any exist
+        // Only for explicit demo scope without owner filter, merge memory demo items if any exist
         const dbObsIds = new Set(data.map((o) => o.id));
         const extraMemObs = memoryStore.observations.filter((o) => {
           if (dbObsIds.has(o.id)) return false;
@@ -797,14 +825,17 @@ export async function getObservations(filters?: {
     }
   }
 
-  // Fallback to memoryStore ONLY if scope is not strictly real
+  // Fallback to memoryStore ONLY if scope is not strictly real and no created_by specified
   if (isRealScope) {
     return memoryStore.observations.filter(
-      (o) => o.demo === false && (!filters?.job_id || o.processing_job_id === filters.job_id)
+      (o) => o.demo === false && (!filters?.job_id || o.processing_job_id === filters.job_id) && (!filters?.created_by || o.created_by === filters.created_by)
     );
   }
 
   let list = [...memoryStore.observations];
+  if (filters?.created_by) {
+    list = list.filter((o) => o.created_by === filters.created_by);
+  }
   if (filters?.scope === 'demo') {
     list = list.filter((o) => o.demo === true);
   }
@@ -823,6 +854,7 @@ export async function getObservations(filters?: {
   }
   return list;
 }
+
 
 export async function getObservationById(id: string): Promise<any> {
   if (supabase) {

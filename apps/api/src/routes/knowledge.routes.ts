@@ -12,8 +12,12 @@ import {
   getMediaById,
   getKnowledgeGraph
 } from '../controllers/knowledgeController.js';
+import { authenticate } from '../middleware/auth.js';
 
 const router = Router();
+
+// Resolve caller identity from verified Supabase JWT or demo tokens
+router.use(authenticate);
 
 // Observations
 router.get('/', getObservations);

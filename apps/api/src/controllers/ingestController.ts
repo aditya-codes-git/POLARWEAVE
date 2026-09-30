@@ -89,6 +89,9 @@ export async function processFiles(req: Request, res: Response) {
     const jobId = `job_${uuidv4().slice(0, 8)}`;
     const jobName = files.length === 1 ? files[0].originalname : `${files.length} research files (${files[0].originalname} + ${files.length - 1} more)`;
 
+    const creatorId = req.user?.id || 'usr_researcher_sharma';
+    const creatorName = req.user?.name || 'Dr. Rajesh Sharma';
+
     // 1. Initial Job State
     const initialJob: ProcessingJob = {
       id: jobId,
@@ -98,6 +101,8 @@ export async function processFiles(req: Request, res: Response) {
       status: 'processing',
       current_stage: 'uploaded',
       progress: 15,
+      created_by: creatorId,
+      created_by_name: creatorName,
       stages: [
         { name: 'uploaded', label: 'Files received & validated in storage', status: 'completed', progress: 100, detail: `${files.length} file(s) validated` },
         { name: 'parsed', label: 'Deterministic document & media parsing', status: 'active', progress: 50, detail: 'Parsing text, structures, and visual content' },
@@ -529,12 +534,14 @@ export async function processFiles(req: Request, res: Response) {
 }
 
 export async function getJobs(req: Request, res: Response) {
-  const jobs = await fetchProcessingJobs();
+  const caller = req.user;
+  const jobs = await fetchProcessingJobs(caller?.id, caller?.role);
   return res.status(200).json({
     success: true,
     data: jobs
   });
 }
+
 
 export async function getJobById(req: Request, res: Response) {
   const id = String(req.params.id);

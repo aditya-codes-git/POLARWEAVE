@@ -13,13 +13,35 @@ import {
 export async function getObservations(req: Request, res: Response) {
   try {
     const { domain, status, expedition_id, query, job_id, scope } = req.query;
+    const user = req.user;
+
+    // Determine ownership filter:
+    // If researcher, they only see their own observations (created_by === user.id)
+    // If public / unauthenticated, they only see VERIFIED status observations
+    // If admin, they see all observations
+    let createdByFilter: string | undefined = undefined;
+    let statusFilter = typeof status === 'string' ? status : undefined;
+
+    if (user?.role === 'researcher') {
+      createdByFilter = user.id;
+    } else if (user?.role === 'public' || !user) {
+      if (!statusFilter || statusFilter === 'ALL') {
+        statusFilter = 'VERIFIED';
+      }
+    }
+
+    console.log(
+      `[AUTH DEBUG] supabase user.id = ${user?.id || 'anonymous'} | supabase user.email = ${user?.email || 'none'} | request route = /api/knowledge | data owner filter = ${createdByFilter || 'none (all/admin/public)'} | role = ${user?.role || 'none'}`
+    );
+
     const list = await fetchObservations({
       domain: typeof domain === 'string' ? domain : undefined,
-      status: typeof status === 'string' ? status : undefined,
+      status: statusFilter,
       expedition_id: typeof expedition_id === 'string' ? expedition_id : undefined,
       query: typeof query === 'string' ? query : undefined,
       job_id: typeof job_id === 'string' ? job_id : undefined,
-      scope: typeof scope === 'string' ? (scope as 'real' | 'demo' | 'all') : undefined
+      scope: typeof scope === 'string' ? (scope as 'real' | 'demo' | 'all') : undefined,
+      created_by: createdByFilter
     });
 
     return res.status(200).json({
@@ -33,6 +55,7 @@ export async function getObservations(req: Request, res: Response) {
     });
   }
 }
+
 
 export async function getObservationById(req: Request, res: Response) {
   try {

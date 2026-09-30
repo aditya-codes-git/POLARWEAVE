@@ -210,16 +210,24 @@ export async function getMedia(type?: string): Promise<MediaAsset[]> {
 // INGESTION & PROCESSING
 // ---------------------------------------------
 export async function processPackage(formData?: FormData): Promise<{ job: ProcessingJob; extracted_observations: Observation[]; evidence_links_count: number }> {
+  const authHeaders = getAuthHeader();
   const options: RequestInit = {
-    method: 'POST'
+    method: 'POST',
+    headers: {
+      ...authHeaders
+    }
   };
 
   if (formData) {
     options.body = formData;
   } else {
-    options.headers = { 'Content-Type': 'application/json' };
+    options.headers = {
+      'Content-Type': 'application/json',
+      ...authHeaders
+    };
     options.body = JSON.stringify({ expedition_id: 'exp_45_ant' });
   }
+
 
   const res = await fetch(`${API_BASE}/api/ingest/process`, options);
   if (!res.ok) {
