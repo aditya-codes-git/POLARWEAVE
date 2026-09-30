@@ -43,6 +43,7 @@ export class MemoryStore {
   relationships: any[] = [];
   outreach: any[] = [];
   jobs: any[] = [];
+  profiles: any[] = [];
 }
 
 export const memoryStore = new MemoryStore();

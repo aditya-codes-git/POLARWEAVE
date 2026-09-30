@@ -74,12 +74,27 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
           const email = user.email || '';
           const meta = user.user_metadata || {};
           const isAdm = email.toLowerCase().includes('admin') || meta.role === 'admin';
+
+          // Check if user has a persisted profile with a chosen role
+          const { getUserProfileByUserId } = await import('../db/repository.js');
+          const profile = await getUserProfileByUserId(user.id);
           
+          let assignedRole: 'admin' | 'researcher' | 'public' = 'researcher';
+          if (isAdm) {
+            assignedRole = 'admin';
+          } else if (profile?.role === 'public') {
+            assignedRole = 'public';
+          } else if (profile?.role === 'researcher') {
+            assignedRole = 'researcher';
+          } else if (meta.role === 'public') {
+            assignedRole = 'public';
+          }
+
           req.user = {
             id: user.id,
-            name: meta.full_name || meta.name || email.split('@')[0] || 'Authenticated User',
+            name: profile?.full_name || meta.full_name || meta.name || email.split('@')[0] || 'Authenticated User',
             email,
-            role: isAdm ? 'admin' : (meta.role === 'public' ? 'public' : 'researcher')
+            role: assignedRole
           };
           console.log(`[POLARWEAVE AUTH] ${req.method} ${req.originalUrl} | user=${req.user.name} | role=${req.user.role} | source=supabase`);
           return next();

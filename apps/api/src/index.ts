@@ -10,6 +10,7 @@ import outreachRoutes from './routes/outreach.routes.js';
 import expeditionsRoutes from './routes/expeditions.routes.js';
 import datasetsRoutes from './routes/datasets.routes.js';
 import mediaRoutes from './routes/media.routes.js';
+import authRoutes from './routes/auth.routes.js';
 import { getJobs, getJobById } from './controllers/ingestController.js';
 
 const app = express();
@@ -76,6 +77,7 @@ app.use('/api/outreach', outreachRoutes);
 app.use('/api/expeditions', expeditionsRoutes);
 app.use('/api/datasets', datasetsRoutes);
 app.use('/api/media', mediaRoutes);
+app.use('/api/auth', authRoutes);
 
 // 404 Handler
 app.use((req: Request, res: Response) => {

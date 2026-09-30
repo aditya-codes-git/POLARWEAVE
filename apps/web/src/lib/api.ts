@@ -8,7 +8,8 @@ import {
   GeneratedContent,
   OutreachGenerationRequest,
   ReviewAction,
-  ApiResponse
+  ApiResponse,
+  UserProfile
 } from '@polarweave/types';
 
 const envObj = (typeof import.meta !== 'undefined' && (import.meta as any).env) ? (import.meta as any).env : (typeof process !== 'undefined' && process.env) ? process.env : {};
@@ -384,3 +385,46 @@ export async function askTheEvidenceQuery(query: string): Promise<{ answer: stri
     };
   }
 }
+
+// ---------------------------------------------
+// USER PROFILE & ONBOARDING
+// ---------------------------------------------
+export async function getCurrentUserProfile(): Promise<UserProfile | null> {
+  try {
+    return await safeFetch<UserProfile>('/api/auth/me');
+  } catch {
+    return null;
+  }
+}
+
+export async function submitOnboarding(payload: {
+  full_name: string;
+  organization: string;
+  designation: string;
+  country: string;
+  role: 'researcher' | 'public';
+  research_domain?: string;
+  affiliation?: string;
+  explorer_interest?: string;
+}): Promise<UserProfile> {
+  const res = await fetch(`${API_BASE}/api/auth/onboarding`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeader()
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!res.ok) {
+    const errJson = await res.json().catch(() => ({}));
+    throw new Error(errJson?.error?.message || `Failed to complete onboarding (${res.status})`);
+  }
+
+  const json = await res.json();
+  if (json.success && json.data) {
+    return json.data;
+  }
+  throw new Error(json.error?.message || 'Failed to complete onboarding');
+}
+

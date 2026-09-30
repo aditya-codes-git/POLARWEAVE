@@ -69,7 +69,15 @@ export interface UserProfile {
   role: UserRole;
   avatar_url?: string;
   institution?: string;
+  organization?: string;
+  designation?: string;
+  country?: string;
+  research_domain?: string;
+  affiliation?: string;
+  explorer_interest?: string;
+  onboarding_completed?: boolean;
   created_at: string;
+  updated_at?: string;
 }
 
 export interface Expedition {

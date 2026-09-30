@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { supabase, signOut as supabaseSignOut } from '../lib/supabase';
+import { getCurrentUserProfile } from '../lib/api';
 
 export type UserRole = 'researcher' | 'admin' | 'public';
 
@@ -14,6 +15,13 @@ export interface UserProfile {
   institution: string;
   badgeLabel: string;
   avatar_url?: string;
+  organization?: string;
+  designation?: string;
+  country?: string;
+  research_domain?: string;
+  affiliation?: string;
+  explorer_interest?: string;
+  onboarding_completed?: boolean;
 }
 
 export const DEMO_PROFILES: Record<UserRole, UserProfile> = {
@@ -25,7 +33,8 @@ export const DEMO_PROFILES: Record<UserRole, UserProfile> = {
     roleLabel: 'Researcher',
     roleTitle: 'Scientific Contributor',
     institution: 'National Centre for Polar and Ocean Research (NCPOR)',
-    badgeLabel: 'RESEARCHER'
+    badgeLabel: 'RESEARCHER',
+    onboarding_completed: true
   },
   admin: {
     id: 'usr_admin_bose',
@@ -35,7 +44,8 @@ export const DEMO_PROFILES: Record<UserRole, UserProfile> = {
     roleLabel: 'Knowledge Admin',
     roleTitle: 'NCPOR Knowledge Management',
     institution: 'Ministry of Earth Sciences (MoES)',
-    badgeLabel: 'KNOWLEDGE ADMIN'
+    badgeLabel: 'KNOWLEDGE ADMIN',
+    onboarding_completed: true
   },
   public: {
     id: 'usr_public_explorer',
@@ -45,7 +55,8 @@ export const DEMO_PROFILES: Record<UserRole, UserProfile> = {
     roleLabel: 'Public Explorer',
     roleTitle: 'Student / Educator',
     institution: 'Public Science Community',
-    badgeLabel: 'PUBLIC EXPLORER'
+    badgeLabel: 'PUBLIC EXPLORER',
+    onboarding_completed: true
   }
 };
 
@@ -57,6 +68,7 @@ interface RoleContextType {
   switchRole: (newRole: UserRole) => void;
   canAccess: (allowedRoles: UserRole[]) => boolean;
   signOutUser: () => Promise<void>;
+  completeOnboarding: (savedProfile: any, role: 'researcher' | 'public') => Promise<void>;
 }
 
 const RoleContext = createContext<RoleContextType | undefined>(undefined);
@@ -119,7 +131,7 @@ export function RoleProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const applySupabaseSessionUser = (sbUser: any) => {
+  const applySupabaseSessionUser = async (sbUser: any) => {
     const meta = sbUser.user_metadata || {};
     const fullName =
       meta.full_name ||
@@ -128,27 +140,116 @@ export function RoleProvider({ children }: { children: ReactNode }) {
     const email = sbUser.email || '';
     const avatar = meta.avatar_url || meta.picture;
     const isAdm = email.toLowerCase().includes('admin') || meta.role === 'admin';
-    const assignedRole: UserRole = isAdm ? 'admin' : 'researcher';
+    const initialRole: UserRole = isAdm ? 'admin' : 'researcher';
+
+    let onboardingCompleted = isAdm; // Admin accounts skip onboarding by default
+    let resolvedRole: UserRole = initialRole;
+    let institution = meta.institution || 'National Centre for Polar and Ocean Research (NCPOR)';
+    let designation = '';
+    let country = '';
+
+    // Check backend persisted profile
+    try {
+      const backendProfile = await getCurrentUserProfile();
+      if (backendProfile) {
+        if (backendProfile.onboarding_completed) {
+          onboardingCompleted = true;
+        }
+        if (backendProfile.role && backendProfile.role !== 'admin') {
+          resolvedRole = backendProfile.role as UserRole;
+        }
+        if (backendProfile.organization) {
+          institution = backendProfile.organization;
+        }
+        if (backendProfile.designation) {
+          designation = backendProfile.designation;
+        }
+        if (backendProfile.country) {
+          country = backendProfile.country;
+        }
+      }
+    } catch (e) {
+      console.warn('[POLARWEAVE] Failed to fetch backend profile during session hydration:', e);
+    }
 
     const profile: UserProfile = {
       id: sbUser.id,
       name: fullName,
       email,
-      role: assignedRole,
-      roleLabel: assignedRole === 'admin' ? 'Knowledge Admin' : 'Researcher',
-      roleTitle: assignedRole === 'admin' ? 'NCPOR Knowledge Management' : 'Scientific Contributor (Google Verified)',
-      institution: meta.institution || 'National Centre for Polar and Ocean Research (NCPOR)',
-      badgeLabel: assignedRole === 'admin' ? 'KNOWLEDGE ADMIN' : 'RESEARCHER',
-      avatar_url: avatar
+      role: resolvedRole,
+      roleLabel:
+        resolvedRole === 'admin'
+          ? 'Knowledge Admin'
+          : resolvedRole === 'public'
+          ? 'Public Explorer'
+          : 'Researcher',
+      roleTitle:
+        resolvedRole === 'admin'
+          ? 'NCPOR Knowledge Management'
+          : resolvedRole === 'public'
+          ? 'Public Discovery'
+          : 'Scientific Contributor',
+      institution,
+      designation,
+      country,
+      badgeLabel:
+        resolvedRole === 'admin'
+          ? 'KNOWLEDGE ADMIN'
+          : resolvedRole === 'public'
+          ? 'PUBLIC EXPLORER'
+          : 'RESEARCHER',
+      avatar_url: avatar,
+      onboarding_completed: onboardingCompleted
     };
 
     setCustomUser(profile);
-    setRoleState(assignedRole);
+    setRoleState(resolvedRole);
+
     try {
-      localStorage.setItem(STORAGE_KEY, assignedRole);
+      localStorage.setItem(STORAGE_KEY, resolvedRole);
       localStorage.setItem('polarweave_user', JSON.stringify(profile));
+      localStorage.setItem('polarweave_demo_role', resolvedRole);
     } catch (e) {
       console.warn('[POLARWEAVE] Storage sync exception:', e);
+    }
+
+    // Routing check: If onboarding is not completed and user is not admin, route to /onboarding
+    if (!onboardingCompleted && !isAdm) {
+      if (window.location.pathname !== '/onboarding') {
+        navigate('/onboarding', { replace: true });
+      }
+    }
+  };
+
+  const completeOnboarding = async (savedProfile: any, newRole: 'researcher' | 'public') => {
+    const updatedProfile: UserProfile = {
+      id: savedProfile.id || savedProfile.user_id || customUser?.id || 'usr_google_user',
+      name: savedProfile.full_name || customUser?.name || 'Researcher',
+      email: savedProfile.email || customUser?.email || '',
+      role: newRole,
+      roleLabel: newRole === 'researcher' ? 'Researcher' : 'Public Explorer',
+      roleTitle: newRole === 'researcher' ? 'Scientific Contributor' : 'Public Discovery',
+      institution: savedProfile.organization || customUser?.institution || '',
+      designation: savedProfile.designation || '',
+      country: savedProfile.country || '',
+      badgeLabel: newRole === 'researcher' ? 'RESEARCHER' : 'PUBLIC EXPLORER',
+      avatar_url: customUser?.avatar_url,
+      organization: savedProfile.organization,
+      research_domain: savedProfile.research_domain,
+      affiliation: savedProfile.affiliation,
+      explorer_interest: savedProfile.explorer_interest,
+      onboarding_completed: true
+    };
+
+    setCustomUser(updatedProfile);
+    setRoleState(newRole);
+
+    try {
+      localStorage.setItem(STORAGE_KEY, newRole);
+      localStorage.setItem('polarweave_user', JSON.stringify(updatedProfile));
+      localStorage.setItem('polarweave_demo_role', newRole);
+    } catch (e) {
+      console.warn('[POLARWEAVE] Failed to save updated profile to localStorage:', e);
     }
   };
 
@@ -212,7 +313,7 @@ export function RoleProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <RoleContext.Provider value={{ role, user, switchRole, canAccess, signOutUser }}>
+    <RoleContext.Provider value={{ role, user, switchRole, canAccess, signOutUser, completeOnboarding }}>
       {children}
     </RoleContext.Provider>
   );

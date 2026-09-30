@@ -8,7 +8,8 @@ import {
   Observation,
   EvidenceLink,
   KnowledgeRelationship,
-  GeneratedContent
+  GeneratedContent,
+  UserProfile
 } from '@polarweave/types';
 
 const BUCKET_NAME = 'polarweave-assets';
@@ -1362,3 +1363,112 @@ export async function getGeneratedContent(): Promise<GeneratedContent[]> {
 
   return memoryStore.outreach;
 }
+
+// -------------------------------------------------------------
+// 11. USER PROFILES & ONBOARDING PERSISTENCE
+// -------------------------------------------------------------
+export async function getUserProfileByUserId(userId: string): Promise<UserProfile | null> {
+  // Check memory store first
+  const mem = memoryStore.profiles.find((p: any) => p.user_id === userId || p.id === userId);
+  if (mem) return mem;
+
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .or(`id.eq.${userId},user_id.eq.${userId}`)
+        .maybeSingle();
+
+      if (!error && data) {
+        return {
+          id: data.id,
+          user_id: data.user_id || data.id,
+          full_name: data.full_name || '',
+          email: data.email || '',
+          role: data.role || 'researcher',
+          institution: data.institution || data.organization || '',
+          organization: data.organization || data.institution || '',
+          designation: data.designation || '',
+          country: data.country || '',
+          research_domain: data.research_domain || '',
+          affiliation: data.affiliation || '',
+          explorer_interest: data.explorer_interest || '',
+          onboarding_completed: Boolean(data.onboarding_completed),
+          avatar_url: data.avatar_url || '',
+          created_at: data.created_at || new Date().toISOString(),
+          updated_at: data.updated_at || new Date().toISOString()
+        };
+      }
+    } catch (err: any) {
+      console.warn('[POLARWEAVE DB] Error fetching profile:', err?.message);
+    }
+  }
+
+  return null;
+}
+
+export async function upsertUserProfile(profileData: Partial<UserProfile> & { user_id: string; email: string }): Promise<UserProfile> {
+  const existing = await getUserProfileByUserId(profileData.user_id);
+  const now = new Date().toISOString();
+
+  const merged: UserProfile = {
+    id: existing?.id || profileData.id || profileData.user_id,
+    user_id: profileData.user_id,
+    full_name: profileData.full_name || existing?.full_name || '',
+    email: profileData.email,
+    role: profileData.role || existing?.role || 'researcher',
+    institution: profileData.organization || profileData.institution || existing?.institution || '',
+    organization: profileData.organization || existing?.organization || '',
+    designation: profileData.designation || existing?.designation || '',
+    country: profileData.country || existing?.country || '',
+    research_domain: profileData.research_domain || existing?.research_domain || '',
+    affiliation: profileData.affiliation || existing?.affiliation || '',
+    explorer_interest: profileData.explorer_interest || existing?.explorer_interest || '',
+    onboarding_completed: profileData.onboarding_completed !== undefined ? profileData.onboarding_completed : (existing?.onboarding_completed ?? true),
+    avatar_url: profileData.avatar_url || existing?.avatar_url || '',
+    created_at: existing?.created_at || now,
+    updated_at: now
+  };
+
+  // Update memory store
+  const memIdx = memoryStore.profiles.findIndex((p: any) => p.user_id === profileData.user_id || p.id === profileData.user_id);
+  if (memIdx !== -1) {
+    memoryStore.profiles[memIdx] = merged;
+  } else {
+    memoryStore.profiles.unshift(merged);
+  }
+
+  // Persist to Supabase if available
+  if (supabase) {
+    try {
+      const dbRow: any = {
+        id: merged.id,
+        user_id: merged.user_id,
+        full_name: merged.full_name,
+        email: merged.email,
+        role: merged.role,
+        organization: merged.organization,
+        institution: merged.institution,
+        designation: merged.designation,
+        country: merged.country,
+        research_domain: merged.research_domain,
+        affiliation: merged.affiliation,
+        explorer_interest: merged.explorer_interest,
+        onboarding_completed: merged.onboarding_completed,
+        avatar_url: merged.avatar_url,
+        updated_at: now
+      };
+
+      const { error } = await supabase.from('profiles').upsert(dbRow, { onConflict: 'id' });
+      if (error) {
+        console.warn('[POLARWEAVE DB] Profiles table upsert warning (falling back to memory):', error.message);
+      }
+    } catch (err: any) {
+      console.warn('[POLARWEAVE DB] Exception upserting profile:', err?.message);
+    }
+  }
+
+  return merged;
+}
+
