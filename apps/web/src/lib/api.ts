@@ -18,30 +18,7 @@ const API_BASE = rawApiBase.replace(/\/+$/, '');
 
 export function getAuthHeader(): Record<string, string> {
   try {
-    const activeRole = localStorage.getItem('polarweave_demo_role') || 'researcher';
-
-    // 1. If currently operating as Admin (Dr. Sunita Bose), strictly use the admin token
-    if (activeRole === 'admin') {
-      // Check if an explicit Supabase session exists that is an admin
-      const sbAuthKey = Object.keys(localStorage).find((k) => k.startsWith('sb-') && k.endsWith('-auth-token'));
-      if (sbAuthKey) {
-        const raw = localStorage.getItem(sbAuthKey);
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (parsed?.user?.email?.toLowerCase().includes('admin') || parsed?.user?.user_metadata?.role === 'admin') {
-            return { Authorization: `Bearer ${parsed.access_token}` };
-          }
-        }
-      }
-      return { Authorization: 'Bearer demo-admin-token' };
-    }
-
-    // 2. If currently operating as Public Explorer
-    if (activeRole === 'public') {
-      return { Authorization: 'Bearer demo-public-token' };
-    }
-
-    // 3. If currently operating as Researcher
+    // 1. If a real Supabase session exists, always use its live Bearer JWT token
     const sbAuthKey = Object.keys(localStorage).find((k) => k.startsWith('sb-') && k.endsWith('-auth-token'));
     if (sbAuthKey) {
       const raw = localStorage.getItem(sbAuthKey);
@@ -51,6 +28,15 @@ export function getAuthHeader(): Record<string, string> {
           return { Authorization: `Bearer ${parsed.access_token}` };
         }
       }
+    }
+
+    // 2. Otherwise use the demo role tokens
+    const activeRole = localStorage.getItem('polarweave_demo_role') || 'researcher';
+    if (activeRole === 'admin') {
+      return { Authorization: 'Bearer demo-admin-token' };
+    }
+    if (activeRole === 'public') {
+      return { Authorization: 'Bearer demo-public-token' };
     }
     return { Authorization: 'Bearer demo-researcher-token' };
   } catch (e) {

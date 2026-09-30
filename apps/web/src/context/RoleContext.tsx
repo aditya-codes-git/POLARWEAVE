@@ -148,6 +148,20 @@ export function RoleProvider({ children }: { children: ReactNode }) {
     let designation = '';
     let country = '';
 
+    // Check if onboarding is already completed from local customUser or stored polarweave_user
+    const localUser = customUser || getInitialCustomUser();
+    if (localUser?.onboarding_completed) {
+      onboardingCompleted = true;
+      if (localUser.role && localUser.role !== 'admin') {
+        resolvedRole = localUser.role;
+      }
+      if (localUser.institution || localUser.organization) {
+        institution = localUser.organization || localUser.institution;
+      }
+      if (localUser.designation) designation = localUser.designation;
+      if (localUser.country) country = localUser.country;
+    }
+
     // Check backend persisted profile
     try {
       const backendProfile = await getCurrentUserProfile();
@@ -158,8 +172,8 @@ export function RoleProvider({ children }: { children: ReactNode }) {
         if (backendProfile.role && backendProfile.role !== 'admin') {
           resolvedRole = backendProfile.role as UserRole;
         }
-        if (backendProfile.organization) {
-          institution = backendProfile.organization;
+        if (backendProfile.organization || backendProfile.institution) {
+          institution = backendProfile.organization || backendProfile.institution;
         }
         if (backendProfile.designation) {
           designation = backendProfile.designation;
@@ -213,11 +227,19 @@ export function RoleProvider({ children }: { children: ReactNode }) {
       console.warn('[POLARWEAVE] Storage sync exception:', e);
     }
 
-    // Routing check: If onboarding is not completed and user is not admin, route to /onboarding
+    // Routing check:
+    // Only route to /onboarding if:
+    // 1. User is not admin
+    // 2. User has NOT completed onboarding
+    // 3. User is not already on /onboarding
     if (!onboardingCompleted && !isAdm) {
       if (window.location.pathname !== '/onboarding') {
         navigate('/onboarding', { replace: true });
       }
+    } else if (onboardingCompleted && window.location.pathname === '/onboarding') {
+      // If user has completed onboarding but landed on /onboarding, redirect them to their workspace/portal
+      const target = resolvedRole === 'public' ? '/explore' : '/workspace';
+      navigate(target, { replace: true });
     }
   };
 

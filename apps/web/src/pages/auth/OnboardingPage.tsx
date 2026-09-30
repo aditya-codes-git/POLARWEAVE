@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -33,6 +33,14 @@ const EXPLORER_INTERESTS = [
 export function OnboardingPage() {
   const navigate = useNavigate();
   const { user, completeOnboarding } = useRole();
+
+  // If user already completed onboarding, do not allow re-entering onboarding
+  useEffect(() => {
+    if (user?.onboarding_completed) {
+      const destination = user.role === 'public' ? '/explore' : '/workspace';
+      navigate(destination, { replace: true });
+    }
+  }, [user?.onboarding_completed, user?.role, navigate]);
 
   const [step, setStep] = useState<1 | 2>(1);
   const [fullName, setFullName] = useState(user.name || '');
