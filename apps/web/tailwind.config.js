@@ -35,6 +35,7 @@ export default {
       },
       fontFamily: {
         sans: [
+          'Poppins',
           'Inter',
           '-apple-system',
           'BlinkMacSystemFont',
@@ -42,7 +43,14 @@ export default {
           'Roboto',
           'sans-serif',
         ],
+        display: [
+          'Poppins',
+          '-apple-system',
+          'BlinkMacSystemFont',
+          'sans-serif',
+        ],
         mono: [
+
           '"JetBrains Mono"',
           'ui-monospace',
           'SFMono-Regular',
