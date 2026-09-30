@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
+    "prebuild": "npm run --workspace=@polarweave/types build",
     "build": "tsc",
     "start": "node dist/index.js",
     "test": "echo \"Testing API suites...\" && exit 0"
