@@ -143,7 +143,7 @@ export async function processFiles(req: Request, res: Response) {
             mime_type: f.mimetype,
             size_bytes: f.size,
             document_type: 'expedition_report',
-            processing_status: parseSuccess ? 'completed' : 'needs_review',
+            processing_status: parseSuccess ? 'completed' : 'failed',
             page_count: pdfData.numpages || 1,
             metadata_json: {
               ...(pdfData.info || {}),
