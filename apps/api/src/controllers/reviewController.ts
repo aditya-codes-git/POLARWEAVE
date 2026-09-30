@@ -9,8 +9,7 @@ export async function reviewEntity(req: Request, res: Response) {
     const body = ReviewActionSchema.parse(req.body);
     const user = req.user;
 
-    // 1. Mandatory Authorization for Verification Decisions (Approve / Reject)
-    // Only Knowledge Admin is permitted to approve or reject submissions.
+    // 1. Mandatory Role Check: Only Knowledge Admin can approve or reject
     if (body.action === 'approve' || body.action === 'reject') {
       if (!user || user.role !== 'admin') {
         return res.status(403).json({
@@ -24,15 +23,15 @@ export async function reviewEntity(req: Request, res: Response) {
         });
       }
 
-      // 2. Self-Approval Safeguard (Section 8)
-      // Separation of duties: Even an admin cannot approve their own submitted research observations
+      // 2. Strict Self-Approval Safeguard:
+      // Even an admin cannot approve their own submission if they are the author
       const currentObs = await getObservationById(id);
       if (currentObs) {
-        const isAuthor = 
-          (currentObs.created_by && currentObs.created_by === user.id) ||
-          (currentObs.created_by_name && currentObs.created_by_name === user.name);
+        const submissionOwnerId = currentObs.created_by;
+        const authenticatedReviewerId = user.id;
 
-        if (isAuthor && currentObs.created_by === user.id) {
+        // If the authenticated reviewer is the author of this submission, block self-approval
+        if (submissionOwnerId && authenticatedReviewerId && submissionOwnerId === authenticatedReviewerId) {
           return res.status(403).json({
             success: false,
             error: {
@@ -43,6 +42,7 @@ export async function reviewEntity(req: Request, res: Response) {
         }
       }
     } else if (body.action === 'edit') {
+
       // 3. Metadata Editing Authorization
       // Public users cannot edit repository knowledge
       if (!user || user.role === 'public') {

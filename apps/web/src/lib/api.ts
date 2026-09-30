@@ -18,7 +18,17 @@ const API_BASE = rawApiBase.replace(/\/+$/, '');
 
 export function getAuthHeader(): Record<string, string> {
   try {
-    // 1. If a real Supabase session exists, always use its live Bearer JWT token
+    const activeRole = localStorage.getItem('polarweave_demo_role') || 'researcher';
+
+    // 1. If actively in Admin demo mode (e.g. Dr. Sunita Bose), send admin token
+    if (activeRole === 'admin') {
+      return { Authorization: 'Bearer demo-admin-token' };
+    }
+    if (activeRole === 'public') {
+      return { Authorization: 'Bearer demo-public-token' };
+    }
+
+    // 2. If a real Supabase session exists, use its live Bearer JWT token
     const sbAuthKey = Object.keys(localStorage).find((k) => k.startsWith('sb-') && k.endsWith('-auth-token'));
     if (sbAuthKey) {
       const raw = localStorage.getItem(sbAuthKey);
@@ -30,14 +40,6 @@ export function getAuthHeader(): Record<string, string> {
       }
     }
 
-    // 2. Otherwise use the demo role tokens
-    const activeRole = localStorage.getItem('polarweave_demo_role') || 'researcher';
-    if (activeRole === 'admin') {
-      return { Authorization: 'Bearer demo-admin-token' };
-    }
-    if (activeRole === 'public') {
-      return { Authorization: 'Bearer demo-public-token' };
-    }
     return { Authorization: 'Bearer demo-researcher-token' };
   } catch (e) {
     console.warn('[POLARWEAVE API] Failed to extract auth token:', e);
