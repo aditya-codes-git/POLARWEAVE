@@ -299,7 +299,15 @@ export async function processFiles(req: Request, res: Response) {
         const mediaId = `med_${uuidv4().slice(0, 8)}`;
         console.log(`[POLARWEAVE Ingest] job_id=${jobId} file_id=${mediaId} analyzing image=${f.originalname}`);
 
-        const imageAnalysis = await analyzeImageContent(f.originalname, f.buffer, f.mimetype);
+        let imageAnalysis: any = null;
+        let imageProcessingError: string | null = null;
+
+        try {
+          imageAnalysis = await analyzeImageContent(f.originalname, f.buffer, f.mimetype);
+        } catch (visionErr: any) {
+          console.error(`[POLARWEAVE Ingest] Image vision error for ${f.originalname}:`, visionErr?.message || visionErr);
+          imageProcessingError = visionErr?.message || 'Vision analysis failed';
+        }
 
         const media: MediaAsset = {
           id: mediaId,
@@ -309,21 +317,29 @@ export async function processFiles(req: Request, res: Response) {
           thumbnail_path: publicUrl || storagePath,
           processing_job_id: jobId,
           capture_date: new Date().toISOString(),
-          metadata_json: { source: 'Direct Upload', filename: f.originalname },
-          ai_analysis_json: {
+          metadata_json: {
+            source: 'Direct Upload',
+            filename: f.originalname,
+            error: imageProcessingError || undefined
+          },
+          ai_analysis_json: imageAnalysis ? {
             caption: imageAnalysis.caption,
             detected_entities: imageAnalysis.detected_entities,
-            confidence: imageAnalysis.confidence
+            confidence: imageAnalysis.confidence,
+            raw_analysis: imageAnalysis.raw_ai_analysis
+          } : {
+            status: 'processing_error',
+            error: imageProcessingError
           },
-          processing_status: 'completed',
+          processing_status: imageProcessingError ? 'failed' : 'completed',
           created_at: new Date().toISOString()
         };
 
         await createMediaAsset(media);
         processedMedia.push(media);
 
-        // If image analysis detected an observation (or visual scientific content), create structured observation
-        if (imageAnalysis.has_observation || imageAnalysis.observation_title) {
+        // If image analysis succeeded and detected an observation, create structured observation
+        if (imageAnalysis && (imageAnalysis.has_observation || imageAnalysis.observation_title)) {
           const obsId = `obs_${uuidv4().slice(0, 8)}`;
           const imgObs: Observation = {
             id: obsId,
@@ -331,7 +347,7 @@ export async function processFiles(req: Request, res: Response) {
             description: imageAnalysis.observation_description || imageAnalysis.caption,
             research_domain: (imageAnalysis.research_domain as any) || (imageAnalysis.is_polar_related ? 'Glaciology' : 'Biology & Ecology'),
             observed_at: new Date().toISOString(),
-            location_name: imageAnalysis.is_polar_related ? 'Bharati Research Station' : 'Unspecified Location',
+            location_name: imageAnalysis.is_polar_related ? 'Polar Field Site' : 'Unspecified Location',
             confidence: imageAnalysis.confidence,
             confidence_level: imageAnalysis.confidence > 0.85 ? 'HIGH' : 'MEDIUM',
             verification_status: 'NEEDS_REVIEW',

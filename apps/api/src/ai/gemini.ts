@@ -1,6 +1,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { env, hasGemini, hasGroq } from '../config/env.js';
 import { callGroqChat } from './groq.js';
+import { callOpenRouterVision } from './openrouter.js';
 import {
   ScientificStructuringOutput,
   ScientificStructuringOutputSchema
@@ -35,10 +36,11 @@ export interface ImageAnalysisResult {
   observation_description?: string;
   research_domain?: string;
   measurements?: Array<{ variable: string; value: number; unit: string }>;
+  raw_ai_analysis?: Record<string, any>;
 }
 
 /**
- * Analyzes uploaded image bytes using Gemini Vision.
+ * Analyzes uploaded image bytes using OpenRouter Vision as the primary vision engine.
  * Strictly adheres to real visual content; never hallucinates Antarctic fixtures for unrelated images.
  */
 export async function analyzeImageContent(
@@ -46,8 +48,50 @@ export async function analyzeImageContent(
   buffer: Buffer,
   mimeType: string
 ): Promise<ImageAnalysisResult> {
-  const base64Data = buffer.toString('base64');
+  // 1. Primary Vision Provider: OpenRouter Vision (OpenAI-compatible multimodal)
+  if (env.OPENROUTER_API_KEY) {
+    try {
+      console.log(`[POLARWEAVE AI] Calling OpenRouter Vision (${env.OPENROUTER_VISION_MODEL || 'openrouter/free'}) for image: ${filename}`);
+      const ov = await callOpenRouterVision(filename, buffer, mimeType);
 
+      const detected_entities = [
+        ...ov.objects,
+        ...ov.scientific_elements
+      ].filter(Boolean);
+
+      const hasEntities = detected_entities.length > 0;
+      const baseName = filename.replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' ');
+      const finalEntities = hasEntities ? detected_entities : [baseName];
+
+      const locationClues = ov.location_clues.join(', ');
+      const researchDomain = ov.is_polar ? 'Glaciology' : 'Biology & Ecology';
+
+      return {
+        caption: ov.description || `Visual content extracted from ${filename}`,
+        detected_entities: finalEntities,
+        is_polar_related: ov.is_polar,
+        confidence: ov.confidence,
+        has_observation: true,
+        observation_title: ov.is_polar
+          ? `Polar visual record: ${filename}`
+          : `Scientific image analysis: ${filename}`,
+        observation_description: ov.description,
+        research_domain: researchDomain,
+        measurements: [],
+        raw_ai_analysis: {
+          provider: 'openrouter',
+          model: env.OPENROUTER_VISION_MODEL || 'openrouter/free',
+          ...ov
+        }
+      };
+    } catch (err: any) {
+      console.error(`[POLARWEAVE AI] OpenRouter Vision analysis failed for ${filename}:`, err?.message || err);
+      throw new Error(`OpenRouter Vision processing error: ${err?.message || 'Vision provider failure'}`);
+    }
+  }
+
+  // 2. Secondary fallback: Gemini Vision if configured
+  const base64Data = buffer.toString('base64');
   if (genAI) {
     try {
       const model = genAI.getGenerativeModel({
@@ -63,7 +107,7 @@ Filename: ${filename}
 
 Instructions:
 1. Provide an accurate, factual caption describing exactly what is visually depicted in the image.
-2. Identify detected visual entities and anatomical/physical features (e.g., if medical/retinal: "retinal fundus", "optic disc", "retinal vessels", "macula"; if equipment: "sensor", "calibrator"; if polar: "sea ice", "iceberg", "glacier").
+2. Identify detected visual entities and anatomical/physical features.
 3. Determine if this image is genuinely related to polar/expedition research (true or false).
 4. If this is an unrelated image (e.g. retinal fundus photograph, medical image, everyday object, sensor test), accurately describe what you see without fabricating Antarctic, polar, or Bharati Station context.
 5. If there is a recognizable scientific observation visible, provide observation_title and observation_description. Otherwise set has_observation to false.
@@ -102,44 +146,20 @@ Return JSON in this exact structure:
         observation_title: parsed.observation_title || undefined,
         observation_description: parsed.observation_description || undefined,
         research_domain: parsed.research_domain || (parsed.is_polar_related ? 'Glaciology' : 'Biology & Ecology'),
-        measurements: Array.isArray(parsed.measurements) ? parsed.measurements : []
+        measurements: Array.isArray(parsed.measurements) ? parsed.measurements : [],
+        raw_ai_analysis: {
+          provider: 'gemini',
+          ...parsed
+        }
       };
     } catch (err: any) {
-      console.warn(`[POLARWEAVE AI] Image analysis fallback for ${filename}:`, err?.message || err);
+      console.warn(`[POLARWEAVE AI] Gemini image analysis failed for ${filename}:`, err?.message || err);
+      throw new Error(`Gemini Vision processing error: ${err?.message || 'Vision provider failure'}`);
     }
   }
 
-  // Factual, non-hallucinating fallback when AI is unavailable or offline
-  const baseName = filename.replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' ');
-  const isRetina = /retin|fundus|eye|optic/i.test(filename);
-  const isPolar = /ice|glacier|antarct|arctic|bharati|maitri/i.test(filename);
-
-  return {
-    caption: isRetina
-      ? 'Retinal fundus image processed. Clinical domain interpretation requires specialized review.'
-      : isPolar
-      ? `Polar visual material recorded in ${filename}.`
-      : `Image ${filename} processed. Domain-specific interpretation is unavailable.`,
-    detected_entities: isRetina
-      ? ['retinal fundus', 'optic disc', 'retinal vessels']
-      : isPolar
-      ? ['polar landscape', 'field photography']
-      : [baseName],
-    is_polar_related: isPolar,
-    confidence: 0.75,
-    has_observation: isRetina || isPolar,
-    observation_title: isRetina
-      ? `Retinal fundus photographic record (${filename})`
-      : isPolar
-      ? `Field photographic record (${filename})`
-      : undefined,
-    observation_description: isRetina
-      ? `Ophthalmic retinal imaging asset ${filename} ingested into multimodal research archive.`
-      : isPolar
-      ? `Visual documentation from field campaign recorded in ${filename}.`
-      : undefined,
-    research_domain: isRetina ? 'Biology & Ecology' : isPolar ? 'Glaciology' : 'Other'
-  };
+  // If no vision provider is configured, throw a clear processing error
+  throw new Error('No Vision AI provider is configured. Please provide OPENROUTER_API_KEY.');
 }
 
 export async function structureScientificDocument(

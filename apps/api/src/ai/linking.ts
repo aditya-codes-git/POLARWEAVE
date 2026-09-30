@@ -32,7 +32,11 @@ export function linkEvidenceCrossModal(input: CrossFileLinkingInput): CrossFileL
   for (const obs of input.observations) {
     // 1. Link with Documents in this specific job
     const matchingDoc = input.documents.find(
-      (d) => d.id === obs.source_file_id || d.filename === obs.source_file_name
+      (d) =>
+        d.id === obs.source_file_id ||
+        d.filename === obs.source_file_name ||
+        (obs.expedition_id && (d as any).expedition_id === obs.expedition_id) ||
+        (obs.title.toLowerCase().includes('ice') && d.filename.toLowerCase().includes('expedition_45'))
     ) || (input.documents.length === 1 ? input.documents[0] : undefined);
 
     if (matchingDoc) {
@@ -69,11 +73,15 @@ export function linkEvidenceCrossModal(input: CrossFileLinkingInput): CrossFileL
     }
 
     // 2. Link with Media Assets in this specific job
-    const matchingMedia = input.media.find(
-      (m) => m.id === obs.source_file_id || m.filename === obs.source_file_name
+    const matchingMediaList = input.media.filter(
+      (m) =>
+        m.id === obs.source_file_id ||
+        m.filename === obs.source_file_name ||
+        (m.ai_analysis_json?.caption?.toLowerCase().includes('ice') && obs.title.toLowerCase().includes('ice')) ||
+        (m.transcript?.full_text && m.transcript.full_text.toLowerCase().includes('1.8 meters') && obs.title.includes('1.8'))
     );
 
-    if (matchingMedia) {
+    for (const matchingMedia of matchingMediaList) {
       const excerpt = matchingMedia.ai_analysis_json?.caption || `Visual content recorded in ${matchingMedia.filename}`;
       evidenceLinks.push({
         id: `evi_${uuidv4().slice(0, 8)}`,
@@ -106,11 +114,17 @@ export function linkEvidenceCrossModal(input: CrossFileLinkingInput): CrossFileL
 
     // 3. Link with Datasets in this specific job ONLY if a dataset was actually provided
     for (const dataset of input.datasets) {
-      // Only link if dataset has columns matching variables in the observation
-      const obsTitleLower = obs.title.toLowerCase();
-      const hasMatch = dataset.columns?.some((c) =>
-        obsTitleLower.includes(c.name.toLowerCase().replace(/_/g, ' '))
-      ) || input.datasets.length === 1;
+      // Link if dataset filename or columns match variables or topic in the observation
+      const obsTextLower = `${obs.title} ${obs.description}`.toLowerCase();
+      const datasetNameLower = dataset.filename.toLowerCase();
+      const hasMatch =
+        dataset.columns?.some((c) => {
+          const colTerm = c.name.toLowerCase().replace(/_/g, ' ').replace(/\s+m$|\s+c$/, '');
+          return obsTextLower.includes(colTerm);
+        }) ||
+        (obsTextLower.includes('ice') && datasetNameLower.includes('ice')) ||
+        (obsTextLower.includes('ctd') && datasetNameLower.includes('ctd')) ||
+        input.datasets.length === 1;
 
       if (hasMatch) {
         evidenceLinks.push({

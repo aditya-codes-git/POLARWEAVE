@@ -233,6 +233,10 @@ export interface MediaAsset {
     detected_entities?: string[];
     confidence?: number;
     is_authoritative_gps?: boolean;
+    raw_analysis?: Record<string, unknown>;
+    status?: string;
+    error?: string | null;
+    [key: string]: unknown;
   };
   transcript?: {
     segments: Array<{

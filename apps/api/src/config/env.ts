@@ -19,6 +19,7 @@ const envSchema = z.object({
   GEMINI_API_KEY: z.string().optional().default(''),
   GROQ_API_KEY: z.string().optional().default(''),
   OPENROUTER_API_KEY: z.string().optional().default(''),
+  OPENROUTER_VISION_MODEL: z.string().optional().default('openrouter/free'),
   
   // Processing limits
   MAX_UPLOAD_SIZE_MB: z.string().default('100').transform((v) => parseInt(v, 10)),
