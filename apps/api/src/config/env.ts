@@ -15,9 +15,10 @@ const envSchema = z.object({
   SUPABASE_ANON_KEY: z.string().optional().default(''),
   SUPABASE_PUBLISHABLE_KEY: z.string().optional().default(''),
   
-  // AI Engines (Gemini and Groq)
+  // AI Engines (Gemini, Groq, and OpenRouter)
   GEMINI_API_KEY: z.string().optional().default(''),
   GROQ_API_KEY: z.string().optional().default(''),
+  OPENROUTER_API_KEY: z.string().optional().default(''),
   
   // Processing limits
   MAX_UPLOAD_SIZE_MB: z.string().default('100').transform((v) => parseInt(v, 10)),
@@ -30,3 +31,4 @@ export const supabaseKey = env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_ANON_KE
 export const hasSupabase = Boolean(env.SUPABASE_URL && supabaseKey);
 export const hasGemini = Boolean(env.GEMINI_API_KEY);
 export const hasGroq = Boolean(env.GROQ_API_KEY);
+export const hasOpenRouter = Boolean(env.OPENROUTER_API_KEY);
