@@ -62,6 +62,7 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
     // 1. Check validated demo tokens (deterministic server-side validation)
     if (VALIDATED_DEMO_TOKENS[token]) {
       req.user = VALIDATED_DEMO_TOKENS[token];
+      console.log(`[POLARWEAVE AUTH] ${req.method} ${req.originalUrl} | user=${req.user.name} | role=${req.user.role} | source=demo`);
       return next();
     }
 
@@ -80,6 +81,7 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
             email,
             role: isAdm ? 'admin' : (meta.role === 'public' ? 'public' : 'researcher')
           };
+          console.log(`[POLARWEAVE AUTH] ${req.method} ${req.originalUrl} | user=${req.user.name} | role=${req.user.role} | source=supabase`);
           return next();
         }
       } catch (authErr) {

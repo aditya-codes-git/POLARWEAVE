@@ -57,6 +57,12 @@ export function ReviewDetailPage() {
     load();
   }, [id, navigate]);
 
+  // Clear stale authorization or error banners when role or observation changes
+  useEffect(() => {
+    setErrorMessage(null);
+    setStatusMessage(null);
+  }, [role, id]);
+
   if (loading) {
     return <div className="p-12 text-center text-xs text-slate-400">Loading observation review...</div>;
   }

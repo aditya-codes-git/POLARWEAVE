@@ -162,9 +162,21 @@ export function RoleProvider({ children }: { children: ReactNode }) {
     setRoleState(newRole);
     setCustomUser(null);
 
+    const token = newRole === 'admin'
+      ? 'demo-admin-token'
+      : newRole === 'public'
+      ? 'demo-public-token'
+      : 'demo-researcher-token';
+
     try {
       localStorage.setItem(STORAGE_KEY, newRole);
       localStorage.setItem('polarweave_user', JSON.stringify(DEMO_PROFILES[newRole]));
+      localStorage.setItem('polarweave_auth_token', token);
+      localStorage.setItem('polarweave_session', JSON.stringify({
+        role: newRole,
+        user: DEMO_PROFILES[newRole],
+        token
+      }));
     } catch (e) {
       console.warn('[POLARWEAVE] Failed to save role to localStorage:', e);
     }
