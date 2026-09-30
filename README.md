@@ -355,14 +355,15 @@ PORT=5000
 CLIENT_URL=http://localhost:5173
 NODE_ENV=development
 
-# Supabase Credentials (Connected to live project)
-SUPABASE_URL=https://bypbibjwgayyahlnwvnu.supabase.co
-SUPABASE_PUBLISHABLE_KEY=sb_publishable_8YgTxjHj3mEenh12DxfwmA_Xk7D4UpK
-SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+# Supabase Credentials
+SUPABASE_URL=https://your-project-id.supabase.co
+SUPABASE_PUBLISHABLE_KEY=your-supabase-publishable-key
+SUPABASE_ANON_KEY=your-supabase-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
 
 # Multimodal AI Engines
-GEMINI_API_KEY=AQ.Ab8RN6JOjPvMlKnwsAw_rhCHbEWcHTFD14OU6Q_iNLit2ddGDQ
-GROQ_API_KEY=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
+GEMINI_API_KEY=your-gemini-api-key-here
+GROQ_API_KEY=your-groq-api-key-here
 
 # File Limits
 MAX_UPLOAD_SIZE_MB=100
@@ -371,8 +372,8 @@ MAX_UPLOAD_SIZE_MB=100
 **Frontend Configuration (`apps/web/.env`):**
 ```env
 VITE_API_URL=http://localhost:5000
-VITE_SUPABASE_URL=https://bypbibjwgayyahlnwvnu.supabase.co
-VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_8YgTxjHj3mEenh12DxfwmA_Xk7D4UpK
+VITE_SUPABASE_URL=https://your-project-id.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=your-supabase-publishable-key
 VITE_DEMO_MODE=false
 ```
 

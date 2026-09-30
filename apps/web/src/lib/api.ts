@@ -13,7 +13,8 @@ import {
 } from '@polarweave/types';
 
 const envObj = (typeof import.meta !== 'undefined' && (import.meta as any).env) ? (import.meta as any).env : (typeof process !== 'undefined' && process.env) ? process.env : {};
-const API_BASE = envObj.VITE_API_URL || 'http://localhost:5000';
+const rawApiBase = envObj.VITE_API_URL || 'http://localhost:5000';
+const API_BASE = rawApiBase.replace(/\/+$/, '');
 
 export function getAuthHeader(): Record<string, string> {
   try {
