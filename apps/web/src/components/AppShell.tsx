@@ -21,7 +21,7 @@ import { getNavigationForRole, NavigationItem } from '../config/navigation';
 export function AppShell() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { role, user, switchRole } = useRole();
+  const { role, user, switchRole, signOutUser } = useRole();
 
   const [isCommandOpen, setIsCommandOpen] = useState(false);
   const [isAskModalOpen, setIsAskModalOpen] = useState(false);
@@ -281,17 +281,25 @@ export function AppShell() {
                 onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
                 className="flex items-center gap-2 pl-2 pr-1.5 py-1 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors"
               >
-                <div
-                  className={`w-6 h-6 rounded-full text-white text-[11px] font-bold flex items-center justify-center ${
-                    role === 'admin'
-                      ? 'bg-purple-700'
-                      : role === 'researcher'
-                      ? 'bg-slate-900'
-                      : 'bg-polar-600'
-                  }`}
-                >
-                  {user.name.charAt(3) || user.name.charAt(0)}
-                </div>
+                {user.avatar_url ? (
+                  <img
+                    src={user.avatar_url}
+                    alt={user.name}
+                    className="w-6 h-6 rounded-full object-cover border border-slate-200"
+                  />
+                ) : (
+                  <div
+                    className={`w-6 h-6 rounded-full text-white text-[11px] font-bold flex items-center justify-center ${
+                      role === 'admin'
+                        ? 'bg-purple-700'
+                        : role === 'researcher'
+                        ? 'bg-slate-900'
+                        : 'bg-polar-600'
+                    }`}
+                  >
+                    {user.name.charAt(3) || user.name.charAt(0)}
+                  </div>
+                )}
                 <div className="text-left hidden lg:block">
                   <div className="text-xs font-semibold text-slate-900 leading-none">
                     {user.name}
@@ -399,8 +407,11 @@ export function AppShell() {
 
                   <div className="border-t border-slate-100 pt-1 mt-1">
                     <button
-                      onClick={() => navigate('/login')}
-                      className="w-full text-left px-3 py-1.5 rounded-lg text-rose-600 hover:bg-rose-50 flex items-center gap-2"
+                      onClick={async () => {
+                        setIsUserMenuOpen(false);
+                        await signOutUser();
+                      }}
+                      className="w-full text-left px-3 py-1.5 rounded-lg text-rose-600 hover:bg-rose-50 flex items-center gap-2 cursor-pointer"
                     >
                       <LogOut className="w-3.5 h-3.5" />
                       <span>Sign Out</span>

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { supabase, signOut as supabaseSignOut } from '../lib/supabase';
 
 export type UserRole = 'researcher' | 'admin' | 'public';
 
@@ -12,6 +13,7 @@ export interface UserProfile {
   roleTitle: string;
   institution: string;
   badgeLabel: string;
+  avatar_url?: string;
 }
 
 export const DEMO_PROFILES: Record<UserRole, UserProfile> = {
@@ -54,6 +56,7 @@ interface RoleContextType {
   user: UserProfile;
   switchRole: (newRole: UserRole) => void;
   canAccess: (allowedRoles: UserRole[]) => boolean;
+  signOutUser: () => Promise<void>;
 }
 
 const RoleContext = createContext<RoleContextType | undefined>(undefined);
@@ -70,39 +73,112 @@ function getInitialRole(): UserRole {
   return 'researcher';
 }
 
+function getInitialCustomUser(): UserProfile | null {
+  try {
+    const saved = localStorage.getItem('polarweave_user');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (parsed?.avatar_url || parsed?.email?.includes('@gmail.com') || parsed?.id?.length > 25) {
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.warn('[POLARWEAVE] Failed to read custom user from localStorage:', e);
+  }
+  return null;
+}
+
 export function RoleProvider({ children }: { children: ReactNode }) {
   const [role, setRoleState] = useState<UserRole>(getInitialRole);
+  const [customUser, setCustomUser] = useState<UserProfile | null>(getInitialCustomUser);
   const location = useLocation();
   const navigate = useNavigate();
 
-  const user = DEMO_PROFILES[role];
+  // Listen for Supabase Authentication (including Google OAuth redirect callbacks)
+  useEffect(() => {
+    if (!supabase) return;
+
+    // Check existing session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        applySupabaseSessionUser(session.user);
+      }
+    });
+
+    // Listen for OAuth callbacks and state changes
+    const {
+      data: { subscription }
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        applySupabaseSessionUser(session.user);
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  const applySupabaseSessionUser = (sbUser: any) => {
+    const meta = sbUser.user_metadata || {};
+    const fullName =
+      meta.full_name ||
+      meta.name ||
+      (sbUser.email ? sbUser.email.split('@')[0] : 'Polar Researcher');
+    const email = sbUser.email || '';
+    const avatar = meta.avatar_url || meta.picture;
+    const isAdm = email.toLowerCase().includes('admin') || meta.role === 'admin';
+    const assignedRole: UserRole = isAdm ? 'admin' : 'researcher';
+
+    const profile: UserProfile = {
+      id: sbUser.id,
+      name: fullName,
+      email,
+      role: assignedRole,
+      roleLabel: assignedRole === 'admin' ? 'Knowledge Admin' : 'Researcher',
+      roleTitle: assignedRole === 'admin' ? 'NCPOR Knowledge Management' : 'Scientific Contributor (Google Verified)',
+      institution: meta.institution || 'National Centre for Polar and Ocean Research (NCPOR)',
+      badgeLabel: assignedRole === 'admin' ? 'KNOWLEDGE ADMIN' : 'RESEARCHER',
+      avatar_url: avatar
+    };
+
+    setCustomUser(profile);
+    setRoleState(assignedRole);
+    try {
+      localStorage.setItem(STORAGE_KEY, assignedRole);
+      localStorage.setItem('polarweave_user', JSON.stringify(profile));
+    } catch (e) {
+      console.warn('[POLARWEAVE] Storage sync exception:', e);
+    }
+  };
+
+  const user = customUser && customUser.role === role
+    ? customUser
+    : DEMO_PROFILES[role];
 
   const switchRole = (newRole: UserRole) => {
     if (newRole === role) return;
 
     setRoleState(newRole);
+    setCustomUser(null);
+
     try {
       localStorage.setItem(STORAGE_KEY, newRole);
-      // Synchronize legacy key for backwards compatibility
       localStorage.setItem('polarweave_user', JSON.stringify(DEMO_PROFILES[newRole]));
     } catch (e) {
       console.warn('[POLARWEAVE] Failed to save role to localStorage:', e);
     }
 
-    // Role-based route redirection safety check (Section 11)
     const currentPath = location.pathname;
 
     if (newRole === 'public') {
-      // Public cannot access any /workspace routes
       if (currentPath.startsWith('/workspace')) {
         navigate('/explore', { replace: true });
       }
     } else if (newRole === 'researcher') {
-      // Researcher cannot access /workspace/admin/*
       if (currentPath.startsWith('/workspace/admin')) {
         navigate('/workspace', { replace: true });
       } else if (currentPath === '/explore' || currentPath === '/') {
-        // Smoothly offer workspace when switching from public
         navigate('/workspace', { replace: true });
       }
     } else if (newRole === 'admin') {
@@ -112,12 +188,19 @@ export function RoleProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const signOutUser = async () => {
+    await supabaseSignOut();
+    setCustomUser(null);
+    setRoleState('researcher');
+    navigate('/login');
+  };
+
   const canAccess = (allowedRoles: UserRole[]) => {
     return allowedRoles.includes(role);
   };
 
   return (
-    <RoleContext.Provider value={{ role, user, switchRole, canAccess }}>
+    <RoleContext.Provider value={{ role, user, switchRole, canAccess, signOutUser }}>
       {children}
     </RoleContext.Provider>
   );
