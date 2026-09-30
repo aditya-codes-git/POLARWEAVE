@@ -193,7 +193,8 @@ export async function getLocations(req: Request, res: Response) {
 }
 
 export async function getDatasets(req: Request, res: Response) {
-  const list = await fetchDatasets();
+  const { job_id } = req.query;
+  const list = await fetchDatasets({ job_id: typeof job_id === 'string' ? job_id : undefined });
   return res.status(200).json({
     success: true,
     data: list
@@ -218,8 +219,11 @@ export async function getDatasetById(req: Request, res: Response) {
 }
 
 export async function getMedia(req: Request, res: Response) {
-  const { type } = req.query;
-  const list = await fetchMedia(typeof type === 'string' ? type : undefined);
+  const { type, job_id } = req.query;
+  const list = await fetchMedia({
+    type: typeof type === 'string' ? type : undefined,
+    job_id: typeof job_id === 'string' ? job_id : undefined
+  });
   return res.status(200).json({
     success: true,
     data: list

@@ -257,6 +257,61 @@ export async function getJobById(id: string): Promise<ProcessingJob> {
   return await safeFetch<ProcessingJob>(`/api/ingest/jobs/${id}`);
 }
 
+export interface ResearchPackagePayload {
+  job: ProcessingJob;
+  title: string;
+  original_filename?: string;
+  upload_date: string;
+  researcher: string;
+  review_status: 'VERIFIED' | 'NEEDS_REVIEW' | 'PARTIALLY_VERIFIED' | 'REJECTED' | 'EMPTY';
+  artifact_count: number;
+  counts: {
+    documents: number;
+    observations: number;
+    measurements: number;
+    datasets: number;
+    media: number;
+    evidence_links: number;
+    relationships: number;
+    outreach: number;
+  };
+  documents: any[];
+  observations: Observation[];
+  measurements: any[];
+  datasets: Dataset[];
+  media: MediaAsset[];
+  evidence_links: EvidenceLink[];
+  relationships: any[];
+  outreach: GeneratedContent[];
+}
+
+export async function getJobPackage(id: string): Promise<ResearchPackagePayload> {
+  return await safeFetch<ResearchPackagePayload>(`/api/ingest/jobs/${id}/package`);
+}
+
+export async function renameProcessingJob(id: string, title: string): Promise<ProcessingJob> {
+  const res = await fetch(`${API_BASE}/api/ingest/jobs/${id}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeader()
+    },
+    body: JSON.stringify({ title })
+  });
+
+  if (!res.ok) {
+    const errJson = await res.json().catch(() => ({}));
+    throw new Error(errJson?.error?.message || `Failed to rename package (status ${res.status})`);
+  }
+
+  const json = await res.json();
+  if (json.success && json.data) {
+    return json.data;
+  }
+  throw new Error(json.error?.message || 'Failed to rename package');
+}
+
+
 // ---------------------------------------------
 // KNOWLEDGE GRAPH
 // ---------------------------------------------

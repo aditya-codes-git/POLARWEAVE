@@ -315,6 +315,10 @@ export interface ProcessingStageInfo {
 export interface ProcessingJob {
   id: string;
   filename: string;
+  title?: string;
+  original_filename?: string;
+  created_by?: string;
+  created_by_name?: string;
   file_type: string;
   size_bytes: number;
   status: "queued" | "processing" | "completed" | "failed" | "needs_review";

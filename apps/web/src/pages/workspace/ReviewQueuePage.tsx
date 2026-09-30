@@ -1,23 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  FileCheck,
-  Clock,
-  CheckCircle2,
-  XCircle,
   ArrowRight,
-  Shield,
-  Layers,
   ChevronRight,
-  Filter,
-  FileText,
   Sparkles,
-  Info
+  Package,
+  List,
+  Edit2,
+  Check,
+  X,
+  FileText
 } from 'lucide-react';
-import { getObservations, getProcessingJobs } from '../../lib/api';
+import {
+  getObservations,
+  getProcessingJobs,
+  getJobPackage,
+  renameProcessingJob,
+  ResearchPackagePayload
+} from '../../lib/api';
 import { Observation, ProcessingJob } from '@polarweave/types';
-import { VerificationBadge, ConfidenceBadge, DomainBadge } from '../../components/ui/badges';
 import { useRole } from '../../context/RoleContext';
+import { ResearchPackageView } from '../../components/ResearchPackageView';
 
 export function ReviewQueuePage() {
   const navigate = useNavigate();
@@ -27,22 +30,30 @@ export function ReviewQueuePage() {
 
   const [observations, setObservations] = useState<Observation[]>([]);
   const [jobs, setJobs] = useState<ProcessingJob[]>([]);
+  const [selectedPackage, setSelectedPackage] = useState<ResearchPackagePayload | null>(null);
+  const [packageLoading, setPackageLoading] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [scope, setScope] = useState<'real' | 'demo' | 'all'>('real');
   const [filter, setFilter] = useState<'all' | 'needs_review' | 'verified'>('all');
+  const [viewMode, setViewMode] = useState<'packages' | 'flat'>('packages');
 
+  // Inline package renaming state
+  const [editingJobId, setEditingJobId] = useState<string | null>(null);
+  const [editingTitle, setEditingTitle] = useState('');
+  const [isRenaming, setIsRenaming] = useState(false);
+
+  const isAdmin = role === 'admin';
+
+  // Load observations and jobs
   useEffect(() => {
     setLoading(true);
-    const activeScope = jobId ? 'real' : scope;
     Promise.all([
       getObservations({
         job_id: jobId || undefined,
-        scope: activeScope
+        scope: 'real'
       }),
       getProcessingJobs()
     ])
       .then(([obsData, jobsData]) => {
-        // Enforce strict client-side guarantee: if jobId is set, discard any record not belonging to jobId
         const scopedData = jobId ? (obsData || []).filter((o) => o.processing_job_id === jobId) : (obsData || []);
         setObservations(scopedData);
         setJobs(jobsData || []);
@@ -53,111 +64,131 @@ export function ReviewQueuePage() {
         setJobs([]);
       })
       .finally(() => setLoading(false));
-  }, [jobId, scope]);
+  }, [jobId]);
+
+  // When jobId is present, load the comprehensive research package
+  useEffect(() => {
+    if (!jobId) {
+      setSelectedPackage(null);
+      return;
+    }
+    setPackageLoading(true);
+    getJobPackage(jobId)
+      .then((pkg) => {
+        setSelectedPackage(pkg);
+      })
+      .catch((err) => {
+        console.warn('Failed to load package for job:', jobId, err);
+        setSelectedPackage(null);
+      })
+      .finally(() => setPackageLoading(false));
+  }, [jobId]);
+
+  const handleStartRename = (e: React.MouseEvent, job: ProcessingJob) => {
+    e.stopPropagation();
+    setEditingJobId(job.id);
+    setEditingTitle(job.title || job.filename);
+  };
+
+  const handleSaveRename = async (e: React.MouseEvent, targetJobId: string) => {
+    e.stopPropagation();
+    if (!editingTitle.trim()) {
+      setEditingJobId(null);
+      return;
+    }
+
+    try {
+      setIsRenaming(true);
+      const updated = await renameProcessingJob(targetJobId, editingTitle.trim());
+      // Update jobs list in state
+      setJobs((prev) =>
+        prev.map((j) => (j.id === targetJobId ? { ...j, title: updated.title } : j))
+      );
+      // Update selectedPackage if open
+      if (selectedPackage && selectedPackage.job.id === targetJobId) {
+        setSelectedPackage({
+          ...selectedPackage,
+          title: updated.title || selectedPackage.title,
+          job: { ...selectedPackage.job, title: updated.title }
+        });
+      }
+      setEditingJobId(null);
+    } catch (err: any) {
+      console.error('Failed to rename job:', err);
+      alert(err.message || 'Failed to rename package');
+    } finally {
+      setIsRenaming(false);
+    }
+  };
+
+  const handleCancelRename = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingJobId(null);
+  };
 
   const filtered = observations.filter((o) => {
-    // Hard invariant: if an active jobId exists, NEVER display artifacts from any other job or demo
     if (jobId && o.processing_job_id !== jobId) return false;
     if (filter === 'needs_review') return o.verification_status === 'NEEDS_REVIEW' || o.verification_status === 'AI_EXTRACTED';
     if (filter === 'verified') return o.verification_status === 'VERIFIED';
     return true;
   });
 
-  const isAdmin = role === 'admin';
-
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="max-w-6xl mx-auto space-y-6 text-slate-900">
+      {/* Top Breadcrumb & Clean Header */}
+      <div className="border-b border-slate-200 pb-5 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 mb-1.5">
-            <span
-              className={`text-[11px] font-mono uppercase tracking-wider font-semibold px-2 py-0.5 rounded border ${
-                isAdmin
-                  ? 'text-purple-700 bg-purple-50 border-purple-200'
-                  : 'text-amber-700 bg-amber-50 border-amber-200'
-              }`}
-            >
-              {isAdmin ? 'NCPOR Institutional Governance' : 'Author Submissions Tracking'}
-            </span>
-            <span className="text-xs text-slate-400">•</span>
-            <span className="text-xs text-slate-500 font-mono">
-              {isAdmin ? 'VERIFICATION QUEUE' : 'MY SUBMISSIONS'}
-            </span>
+          <div className="text-[11px] font-mono text-slate-500 uppercase tracking-wider mb-1">
+            Institutional Verification
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
             {isAdmin ? 'Institutional Verification Queue' : 'My Submissions'}
           </h1>
-          <p className="text-xs text-slate-500 mt-1">
+          <p className="text-sm text-slate-500 mt-1">
             {isAdmin
-              ? 'Institution-wide verification queue. Sign-off on researcher findings before institutional archiving and public dissemination.'
-              : 'Track your uploaded research packages, inspect AI-extracted observations, and follow Knowledge Admin verification decisions.'}
+              ? 'Review and verify findings grouped by research package before institutional sign-off.'
+              : 'Track and manage research packages submitted for NCPOR institutional review.'}
           </p>
         </div>
 
-        {/* Filters */}
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Real vs Demo Scope Selector (Section 13) */}
-          <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-slate-200 shadow-subtle">
+        {/* View Toggle & Status Filter */}
+        <div className="flex items-center gap-3">
+          {/* View Toggle */}
+          <div className="flex items-center border border-slate-200 rounded-md bg-white p-0.5 text-xs">
             <button
-              onClick={() => {
-                if (!jobId) setScope('real');
-              }}
-              title={jobId ? 'Locked to active job scope' : 'Show uploaded real materials'}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                jobId
-                  ? 'bg-polar-600 text-white shadow-sm cursor-default'
-                  : scope === 'real'
-                  ? 'bg-polar-600 text-white shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              onClick={() => setViewMode('packages')}
+              className={`px-3 py-1 rounded font-medium transition-colors flex items-center gap-1.5 ${
+                viewMode === 'packages'
+                  ? 'bg-slate-900 text-white'
+                  : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              {jobId ? 'Current Job Findings' : 'Uploaded Material'}
+              <Package className="w-3.5 h-3.5" />
+              <span>Packages</span>
             </button>
             <button
-              onClick={() => {
-                if (!jobId) setScope('demo');
-              }}
-              disabled={Boolean(jobId)}
-              title={jobId ? 'Clear job scope via "Show All Uploads" to access demo archives' : 'Show demo archive'}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                jobId
-                  ? 'opacity-40 cursor-not-allowed text-slate-400'
-                  : scope === 'demo'
-                  ? 'bg-amber-600 text-white shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              onClick={() => setViewMode('flat')}
+              className={`px-3 py-1 rounded font-medium transition-colors flex items-center gap-1.5 ${
+                viewMode === 'flat'
+                  ? 'bg-slate-900 text-white'
+                  : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              Demo Archives
-            </button>
-            <button
-              onClick={() => {
-                if (!jobId) setScope('all');
-              }}
-              disabled={Boolean(jobId)}
-              title={jobId ? 'Clear job scope via "Show All Uploads" to access all archives' : 'Show all findings'}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                jobId
-                  ? 'opacity-40 cursor-not-allowed text-slate-400'
-                  : scope === 'all'
-                  ? 'bg-slate-900 text-white shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-              }`}
-            >
-              All
+              <List className="w-3.5 h-3.5" />
+              <span>Flat Artifacts</span>
             </button>
           </div>
 
-          {/* Verification Status Filter */}
-          <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-slate-200 shadow-subtle shrink-0">
+          {/* Status Filter */}
+          <div className="flex items-center border border-slate-200 rounded-md bg-white p-0.5 text-xs">
             {(['all', 'needs_review', 'verified'] as const).map((f) => (
               <button
                 key={f}
                 onClick={() => setFilter(f)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-colors ${
+                className={`px-2.5 py-1 rounded capitalize font-medium transition-colors ${
                   filter === f
-                    ? 'bg-slate-900 text-white shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                    ? 'bg-slate-100 text-slate-900'
+                    : 'text-slate-500 hover:text-slate-900'
                 }`}
               >
                 {f.replace('_', ' ')}
@@ -167,150 +198,253 @@ export function ReviewQueuePage() {
         </div>
       </div>
 
-      {/* Active Job Alert Banner if job_id query param is present */}
-      {jobId && (
-        <div className="p-3.5 bg-polar-50/80 border border-polar-200 rounded-xl flex items-center justify-between text-xs text-polar-800">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-polar-600 shrink-0" />
-            <span>
-              Showing findings exclusively scoped to Processing Job: <code className="font-mono font-bold bg-polar-100 px-1.5 py-0.5 rounded">{jobId}</code>
-            </span>
+      {/* When a specific package is selected (via query param or card click) */}
+      {jobId ? (
+        packageLoading ? (
+          <div className="bg-white border border-slate-200 rounded-lg p-12 text-center text-xs text-slate-400">
+            Loading research package {jobId}...
           </div>
-          <button
-            onClick={() => setSearchParams({})}
-            className="text-xs font-semibold text-polar-700 hover:underline"
-          >
-            Show All Uploads
-          </button>
-        </div>
-      )}
-
-      {/* Compact Operational Processing Status */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-subtle flex flex-col md:flex-row md:items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-polar-50 text-polar-600 flex items-center justify-center border border-polar-200 shrink-0">
-            <Layers className="w-4 h-4" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-slate-800">
-                {jobId ? 'Job Scoped Ingestion Run' : 'Operational Processing Pipeline'}
-              </span>
-              <span className="text-[10px] font-mono px-2 py-0.2 rounded font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 uppercase">
-                {jobId
-                  ? 'Scoped to Job'
-                  : jobs.filter((j) => j.status === 'processing' || j.status === 'queued').length > 0
-                  ? `${jobs.filter((j) => j.status === 'processing' || j.status === 'queued').length} In-Flight`
-                  : 'All Jobs Processed'}
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-500">
-              {jobId ? (
-                <>
-                  Showing output exclusively for <code className="font-mono font-bold text-slate-700">{jobId}</code>. Other ingested findings are omitted.
-                </>
-              ) : jobs.length === 0 ? (
-                'No ingestion runs recorded. New uploads automatically flow through deterministic multimodal parsing.'
-              ) : (
-                `Latest run: ${jobs[0]?.filename || 'Upload'} (${jobs[0]?.status || 'completed'}) • ${jobs.length} total ingest jobs tracked`
-              )}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 self-end md:self-center shrink-0">
-          {jobId ? (
+        ) : selectedPackage ? (
+          <ResearchPackageView
+            pkg={selectedPackage}
+            onBack={() => setSearchParams({})}
+            isAdmin={isAdmin}
+            onRename={async (newTitle) => {
+              const updated = await renameProcessingJob(selectedPackage.job.id, newTitle);
+              setSelectedPackage({
+                ...selectedPackage,
+                title: updated.title || newTitle,
+                job: { ...selectedPackage.job, title: updated.title }
+              });
+              setJobs((prev) =>
+                prev.map((j) => (j.id === selectedPackage.job.id ? { ...j, title: updated.title } : j))
+              );
+            }}
+          />
+        ) : (
+          <div className="bg-white border border-slate-200 rounded-lg p-8 text-center space-y-3">
+            <p className="text-sm text-slate-700">Package container could not be loaded for {jobId}</p>
             <button
               onClick={() => setSearchParams({})}
-              className="text-xs font-semibold text-polar-700 hover:text-polar-900 bg-polar-50 hover:bg-polar-100 px-3 py-1.5 rounded-xl border border-polar-200 transition-colors flex items-center gap-1.5"
+              className="text-xs text-slate-600 hover:text-slate-900 underline underline-offset-2"
             >
-              <span>View All Submissions (All Jobs)</span>
-              <ArrowRight className="w-3.5 h-3.5" />
+              Return to All Research Packages
             </button>
-          ) : jobs.length > 0 ? (
-            <button
-              onClick={() => navigate(`/workspace/processing?jobId=${jobs[0].id}`)}
-              className="text-xs font-semibold text-polar-700 hover:text-polar-900 bg-polar-50 hover:bg-polar-100 px-3 py-1.5 rounded-xl border border-polar-200 transition-colors flex items-center gap-1.5"
-            >
-              <span>Inspect Latest Run ({jobs[0].id})</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-          ) : null}
-        </div>
-      </div>
-
-      {/* Observation Cards */}
-      <div className="bg-white border border-slate-200 rounded-2xl shadow-subtle divide-y divide-slate-100 overflow-hidden">
-        {loading ? (
-          <div className="p-12 text-center text-xs text-slate-400">Loading review queue findings...</div>
-        ) : filtered.length === 0 ? (
-          <div className="p-12 text-center space-y-2">
-            <div className="text-sm font-semibold text-slate-700">No observations found</div>
-            <p className="text-xs text-slate-400">
-              {jobId
-                ? 'No structured scientific findings were extracted from this specific job upload.'
-                : scope === 'real'
-                ? 'No real uploaded findings staged. Ingest a research package to create findings.'
-                : 'No observations match the current filter.'}
-            </p>
           </div>
-        ) : (
-          filtered.map((obs) => (
-            <div
-              key={obs.id}
-              onClick={() => navigate(`/workspace/review/${obs.id}`)}
-              className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-slate-50/80 transition-colors cursor-pointer group"
-            >
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <DomainBadge domain={obs.research_domain} />
-                  <span className="text-xs text-slate-400">•</span>
-                  <span className="text-xs font-mono text-slate-600">
-                    Source: {obs.source_file_name || (obs.source_file_id ? `File ${obs.source_file_id}` : (obs.demo ? 'Expedition 45 Fixture' : 'Uploaded File'))}
-                  </span>
-                  {obs.processing_job_id && (
-                    <>
-                      <span className="text-xs text-slate-400">•</span>
-                      <span className="text-[11px] font-mono bg-slate-100 px-1.5 py-0.5 rounded text-slate-600">
-                        {obs.processing_job_id}
-                      </span>
-                    </>
-                  )}
-                  {obs.demo && (
-                    <span className="text-[10px] font-mono uppercase bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded font-semibold">
-                      Demo Fixture
-                    </span>
-                  )}
-                  <span className="text-xs text-slate-400">•</span>
-                  <span className="text-xs text-slate-500">{obs.location_name || 'Unspecified Location'}</span>
-                </div>
+        )
+      ) : viewMode === 'packages' ? (
+        /* Clean Institutional Research Package List */
+        <div className="space-y-3">
+          <div className="flex items-center justify-between text-xs text-slate-500 px-1">
+            <span>{jobs.length} Research Package{jobs.length === 1 ? '' : 's'}</span>
+            <span>One Job = One Container</span>
+          </div>
 
-                <h3 className="text-sm font-semibold text-slate-900 group-hover:text-polar-700 transition-colors">
-                  {obs.title}
-                </h3>
-                <p className="text-xs text-slate-500 line-clamp-1">
-                  {obs.description}
-                </p>
-              </div>
-
-              <div className="flex items-center gap-3 shrink-0">
-                <ConfidenceBadge confidence={obs.confidence} />
-                <VerificationBadge status={obs.verification_status} />
-                <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg transition-colors hidden sm:inline-block ${
-                  isAdmin
-                    ? 'bg-slate-900 text-white group-hover:bg-polar-600'
-                    : 'bg-slate-100 text-slate-700 group-hover:bg-slate-200'
-                }`}>
-                  {isAdmin ? 'Verify Fact' : 'View Status'}
-                </span>
-                <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500 group-hover:bg-polar-100 group-hover:text-polar-700 transition-colors">
-                  <ChevronRight className="w-4 h-4" />
-                </div>
-              </div>
+          {loading ? (
+            <div className="bg-white border border-slate-200 rounded-lg p-12 text-center text-xs text-slate-400">
+              Loading packages...
             </div>
-          ))
-        )}
-      </div>
+          ) : jobs.length === 0 ? (
+            <div className="bg-white border border-slate-200 rounded-lg p-12 text-center space-y-2">
+              <div className="text-sm font-medium text-slate-800">No Research Packages Found</div>
+              <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                Uploaded scientific papers or expedition reports will appear here as self-contained research packages.
+              </p>
+            </div>
+          ) : (
+            <div className="bg-white border border-slate-200 rounded-lg divide-y divide-slate-200">
+              {jobs.map((job) => {
+                const jobObs = observations.filter((o) => o.processing_job_id === job.id);
+                const verifiedCount = jobObs.filter((o) => o.verification_status === 'VERIFIED').length;
+                
+                let reviewBadgeText = 'Needs Review';
+                let reviewBadgeClass = 'text-amber-700 bg-amber-50 border-amber-200';
+                if (jobObs.length > 0 && verifiedCount === jobObs.length) {
+                  reviewBadgeText = 'Verified';
+                  reviewBadgeClass = 'text-emerald-700 bg-emerald-50 border-emerald-200';
+                } else if (verifiedCount > 0) {
+                  reviewBadgeText = 'Partially Verified';
+                  reviewBadgeClass = 'text-blue-700 bg-blue-50 border-blue-200';
+                }
+
+                if (filter === 'needs_review' && reviewBadgeText === 'Verified') return null;
+                if (filter === 'verified' && reviewBadgeText !== 'Verified') return null;
+
+                const uploadDate = new Date(job.started_at).toLocaleDateString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                  year: 'numeric'
+                });
+
+                const displayTitle = job.title || job.filename;
+                const originalFilename = job.original_filename || job.filename;
+                const isEditing = editingJobId === job.id;
+
+                return (
+                  <div
+                    key={job.id}
+                    onClick={() => {
+                      if (!isEditing) setSearchParams({ jobId: job.id });
+                    }}
+                    className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-slate-50/70 transition-colors cursor-pointer group"
+                  >
+                    {/* Left Column: Title & Metadata */}
+                    <div className="space-y-1.5 flex-1 min-w-0 pr-4">
+                      {isEditing ? (
+                        <div
+                          className="flex items-center gap-2"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <input
+                            type="text"
+                            value={editingTitle}
+                            onChange={(e) => setEditingTitle(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleSaveRename(e as any, job.id);
+                              if (e.key === 'Escape') handleCancelRename(e as any);
+                            }}
+                            autoFocus
+                            disabled={isRenaming}
+                            className="text-sm font-semibold text-slate-900 border border-slate-300 rounded px-2.5 py-1 focus:outline-none focus:border-slate-600 w-full max-w-md bg-white"
+                          />
+                          <button
+                            onClick={(e) => handleSaveRename(e, job.id)}
+                            disabled={isRenaming}
+                            title="Save name"
+                            className="p-1 rounded text-slate-700 hover:bg-slate-100 transition-colors"
+                          >
+                            <Check className="w-4 h-4 text-emerald-600" />
+                          </button>
+                          <button
+                            onClick={handleCancelRename}
+                            disabled={isRenaming}
+                            title="Cancel"
+                            className="p-1 rounded text-slate-500 hover:bg-slate-100 transition-colors"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h2 className="text-base font-semibold text-slate-900 group-hover:text-blue-600 transition-colors truncate">
+                            {displayTitle}
+                          </h2>
+                          <button
+                            onClick={(e) => handleStartRename(e, job)}
+                            title="Rename research package"
+                            className="p-1 text-slate-400 hover:text-slate-700 rounded transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Original Filename & Source Metadata */}
+                      <div className="flex items-center gap-3 text-xs text-slate-500 flex-wrap">
+                        {displayTitle !== originalFilename && (
+                          <>
+                            <span className="font-mono text-slate-400 truncate max-w-xs">
+                              {originalFilename}
+                            </span>
+                            <span>•</span>
+                          </>
+                        )}
+                        <span className="font-mono text-slate-400">{job.id}</span>
+                        <span>•</span>
+                        <span>Dr. Rajesh Sharma (NCPOR)</span>
+                      </div>
+                    </div>
+
+                    {/* Middle Column: Status & Artifact Count */}
+                    <div className="flex items-center gap-6 text-xs text-slate-500 shrink-0">
+                      <div className="text-right">
+                        <div className="font-medium text-slate-800">
+                          {jobObs.length} artifact{jobObs.length === 1 ? '' : 's'}
+                        </div>
+                        <div className="text-[11px] text-slate-400">{uploadDate}</div>
+                      </div>
+
+                      <div className="w-28 text-right">
+                        <span
+                          className={`inline-block px-2.5 py-0.5 rounded text-[11px] font-medium border ${reviewBadgeClass}`}
+                        >
+                          {reviewBadgeText}
+                        </span>
+                      </div>
+
+                      {/* Right Action */}
+                      <div className="flex items-center gap-1 text-slate-400 group-hover:text-slate-800 transition-colors pl-2">
+                        <span className="text-xs font-medium">Open</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      ) : (
+        /* Flat List of All Uploaded Artifacts */
+        <div className="space-y-3">
+          <div className="flex items-center justify-between text-xs text-slate-500 px-1">
+            <span>{filtered.length} total individual artifacts</span>
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-lg divide-y divide-slate-200">
+            {loading ? (
+              <div className="p-12 text-center text-xs text-slate-400">Loading findings...</div>
+            ) : filtered.length === 0 ? (
+              <div className="p-12 text-center space-y-2">
+                <div className="text-sm font-medium text-slate-800">No observations found</div>
+                <p className="text-xs text-slate-400">No findings match the current filter.</p>
+              </div>
+            ) : (
+              filtered.map((obs) => (
+                <div
+                  key={obs.id}
+                  onClick={() => navigate(`/workspace/review/${obs.id}`)}
+                  className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-slate-50/70 transition-colors cursor-pointer group"
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 text-xs text-slate-500">
+                      <span className="font-medium text-slate-700 capitalize">
+                        {obs.research_domain.replace('_', ' ')}
+                      </span>
+                      <span>•</span>
+                      <span className="font-mono text-slate-400">
+                        {obs.source_file_name || obs.processing_job_id || 'Uploaded Source'}
+                      </span>
+                      <span>•</span>
+                      <span>{obs.location_name || 'Unspecified Location'}</span>
+                    </div>
+
+                    <h3 className="text-sm font-semibold text-slate-900 group-hover:text-blue-600 transition-colors">
+                      {obs.title}
+                    </h3>
+                    <p className="text-xs text-slate-500 line-clamp-1">
+                      {obs.description}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-4 shrink-0 text-xs">
+                    <span
+                      className={`px-2 py-0.5 rounded text-[11px] font-medium border ${
+                        obs.verification_status === 'VERIFIED'
+                          ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                          : 'text-amber-700 bg-amber-50 border-amber-200'
+                      }`}
+                    >
+                      {obs.verification_status.replace('_', ' ')}
+                    </span>
+                    <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-slate-800 transition-colors" />
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

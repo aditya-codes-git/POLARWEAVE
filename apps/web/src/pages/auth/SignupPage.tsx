@@ -45,14 +45,11 @@ export function SignupPage() {
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md bg-white border border-slate-200 rounded-3xl p-8 shadow-elevated space-y-6">
         <div className="text-center space-y-2">
-          <div className="w-10 h-10 rounded-xl bg-polar-600 flex items-center justify-center text-white mx-auto shadow-sm">
-            <svg className="w-6 h-6 fill-current" viewBox="0 0 24 24">
-              <path d="M12 2L4 6v12l8 4 8-4V6l-8-4zm0 2.2l6 3v9.6l-6 3-6-3V7.2l6-3zM12 9l-4 2v4l4 2 4-2v-4l-4-2z" />
-            </svg>
-          </div>
-          <h1 className="text-xl font-bold tracking-tight text-slate-900">
-            Create POLARWEAVE Account
-          </h1>
+          <img
+            src="/logo.png"
+            alt="POLARWEAVE"
+            className="h-12 w-auto object-contain mx-auto"
+          />
           <p className="text-xs text-slate-500">
             Access scientific ingestion, evidence linking, and outreach tools
           </p>

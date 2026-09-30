@@ -1,5 +1,5 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, NavLink } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   FileText,
@@ -24,26 +24,13 @@ export function LandingPage() {
     <div className="min-h-screen bg-white text-slate-900 selection:bg-polar-100 selection:text-polar-900">
       {/* 1. PUBLIC NAVIGATION */}
       <nav className="h-16 border-b border-slate-200/80 px-6 max-w-7xl mx-auto flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-polar-600 flex items-center justify-center text-white shadow-sm">
-            <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
-              <path d="M12 2L4 6v12l8 4 8-4V6l-8-4zm0 2.2l6 3v9.6l-6 3-6-3V7.2l6-3zM12 9l-4 2v4l4 2 4-2v-4l-4-2z" />
-            </svg>
-          </div>
-          <div>
-            <div className="flex items-center gap-1.5">
-              <span className="font-bold text-sm tracking-tight text-slate-950">
-                POLARWEAVE
-              </span>
-              <span className="text-[10px] font-mono uppercase bg-polar-100 text-polar-800 px-1.5 py-0.2 rounded border border-polar-200">
-                SIH26063
-              </span>
-            </div>
-            <p className="text-[10px] text-slate-400">
-              Ministry of Earth Sciences • NCPOR
-            </p>
-          </div>
-        </div>
+        <NavLink to="/" className="flex items-center">
+          <img
+            src="/logo.png"
+            alt="POLARWEAVE"
+            className="h-12 w-auto object-contain max-w-[240px]"
+          />
+        </NavLink>
 
         <div className="hidden md:flex items-center gap-6 text-xs font-medium text-slate-600">
           <a href="#problem" className="hover:text-slate-900 transition-colors">The Problem</a>

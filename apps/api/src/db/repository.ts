@@ -98,9 +98,29 @@ export async function updateProcessingJob(
   id: string,
   updates: Partial<ProcessingJob>
 ): Promise<ProcessingJob | null> {
+  const current = await getProcessingJobById(id);
   const memIdx = memoryStore.jobs.findIndex((j) => j.id === id);
+
+  const mergedSummary = {
+    ...(current?.result_summary || {}),
+    ...(updates.result_summary || {}),
+    ...(updates.title !== undefined ? { package_title: updates.title } : {}),
+    ...(updates.original_filename !== undefined ? { original_filename: updates.original_filename } : {})
+  };
+
+  const updatedObj: ProcessingJob = {
+    ...(current || ({} as any)),
+    ...updates,
+    id,
+    title: updates.title !== undefined ? updates.title : current?.title,
+    original_filename: updates.original_filename !== undefined ? updates.original_filename : (current?.original_filename || current?.filename),
+    result_summary: mergedSummary
+  };
+
   if (memIdx !== -1) {
-    memoryStore.jobs[memIdx] = { ...memoryStore.jobs[memIdx], ...updates };
+    memoryStore.jobs[memIdx] = updatedObj;
+  } else {
+    memoryStore.jobs.unshift(updatedObj);
   }
 
   if (supabase) {
@@ -111,8 +131,8 @@ export async function updateProcessingJob(
       if (updates.stages !== undefined) dbPayload.stages = updates.stages;
       if (updates.progress !== undefined) dbPayload.progress = updates.progress;
       if (updates.error_message !== undefined) dbPayload.error_message = updates.error_message;
-      if (updates.result_summary !== undefined) dbPayload.result_summary = updates.result_summary;
       if (updates.completed_at !== undefined) dbPayload.completed_at = updates.completed_at;
+      dbPayload.result_summary = mergedSummary;
 
       const { error } = await supabase.from('processing_jobs').update(dbPayload).eq('id', id);
       if (error) {
@@ -123,7 +143,7 @@ export async function updateProcessingJob(
     }
   }
 
-  return memIdx !== -1 ? memoryStore.jobs[memIdx] : null;
+  return updatedObj;
 }
 
 export async function getProcessingJobs(): Promise<ProcessingJob[]> {
@@ -135,7 +155,11 @@ export async function getProcessingJobs(): Promise<ProcessingJob[]> {
         .order('started_at', { ascending: false });
 
       if (!error && data) {
-        return data;
+        return data.map((j: any) => ({
+          ...j,
+          title: j.result_summary?.package_title || j.title || j.filename,
+          original_filename: j.result_summary?.original_filename || j.original_filename || j.filename
+        }));
       }
     } catch (err: any) {
       console.warn('[POLARWEAVE DB] Error fetching processing_jobs:', err?.message);
@@ -155,7 +179,12 @@ export async function getProcessingJobById(id: string): Promise<ProcessingJob | 
         .single();
 
       if (!error && data) {
-        return data as ProcessingJob;
+        const job = data as ProcessingJob;
+        return {
+          ...job,
+          title: (job.result_summary as any)?.package_title || job.title || job.filename,
+          original_filename: (job.result_summary as any)?.original_filename || job.original_filename || job.filename
+        };
       }
     } catch (err: any) {
       console.warn(`[POLARWEAVE DB] Error fetching job ${id}:`, err?.message);
@@ -163,6 +192,151 @@ export async function getProcessingJobById(id: string): Promise<ProcessingJob | 
   }
 
   return memoryStore.jobs.find((j) => j.id === id) || null;
+}
+
+export async function getJobPackageData(jobId: string): Promise<any> {
+  const job = await getProcessingJobById(jobId);
+  if (!job) return null;
+
+  // 1. Documents (Source Material)
+  const documents = await getDocuments({ job_id: jobId });
+
+  // 2. Observations (Extracted Knowledge)
+  const observations = await getObservations({ job_id: jobId });
+  const obsIds = observations.map((o) => o.id);
+
+  // 3. Measurements for these observations
+  let measurements: any[] = [];
+  if (obsIds.length > 0) {
+    if (supabase) {
+      try {
+        const { data: dbMsrs } = await supabase
+          .from('measurements')
+          .select('*')
+          .in('observation_id', obsIds);
+        if (dbMsrs) measurements = dbMsrs;
+      } catch (err: any) {
+        console.warn('[POLARWEAVE DB] Error fetching measurements for job package:', err?.message);
+      }
+    }
+    const memMsrs = memoryStore.measurements.filter((m) => obsIds.includes(m.observation_id));
+    const seenMsrIds = new Set(measurements.map((m) => m.id));
+    measurements.push(...memMsrs.filter((m) => !seenMsrIds.has(m.id)));
+  }
+
+  // 4. Datasets
+  const datasets = await getDatasets({ job_id: jobId });
+
+  // 5. Media
+  const media = await getMedia({ job_id: jobId });
+
+  // 6. Evidence Links
+  let evidenceLinks: EvidenceLink[] = [];
+  if (supabase) {
+    try {
+      const { data: dbLinks } = await supabase
+        .from('evidence_links')
+        .select('*')
+        .eq('processing_job_id', jobId);
+      if (dbLinks) evidenceLinks = dbLinks as EvidenceLink[];
+    } catch (err: any) {
+      console.warn('[POLARWEAVE DB] Error fetching evidence links for job package:', err?.message);
+    }
+  }
+  const memLinks = memoryStore.evidenceLinks.filter((l) => l.processing_job_id === jobId || obsIds.includes(l.knowledge_id));
+  const seenLinkIds = new Set(evidenceLinks.map((l) => l.id));
+  evidenceLinks.push(...memLinks.filter((l) => !seenLinkIds.has(l.id)));
+
+  // 7. Relationships
+  const allEntityIds = new Set([
+    ...obsIds,
+    ...documents.map((d) => d.id),
+    ...datasets.map((d) => d.id),
+    ...media.map((m) => m.id)
+  ]);
+  let relationships: KnowledgeRelationship[] = [];
+  if (supabase) {
+    try {
+      const { data: dbRels } = await supabase.from('knowledge_relationships').select('*');
+      if (dbRels) {
+        relationships = dbRels.filter(
+          (r: any) => allEntityIds.has(r.source_entity_id) || allEntityIds.has(r.target_entity_id)
+        );
+      }
+    } catch (err: any) {
+      console.warn('[POLARWEAVE DB] Error fetching relationships for job package:', err?.message);
+    }
+  }
+  const memRels = memoryStore.relationships.filter(
+    (r) => allEntityIds.has(r.source_entity_id) || allEntityIds.has(r.target_entity_id)
+  );
+  const seenRelIds = new Set(relationships.map((r) => r.id));
+  relationships.push(...memRels.filter((r) => !seenRelIds.has(r.id)));
+
+  // 8. Generated outreach content citing this job's findings
+  let outreach: GeneratedContent[] = [];
+  if (supabase) {
+    try {
+      const { data: dbOutreach } = await supabase.from('generated_content').select('*');
+      if (dbOutreach) {
+        outreach = dbOutreach.filter((c: any) => 
+          Array.isArray(c.source_knowledge_ids) && c.source_knowledge_ids.some((kid: string) => obsIds.includes(kid))
+        );
+      }
+    } catch (err: any) {
+      console.warn('[POLARWEAVE DB] Error fetching outreach for job package:', err?.message);
+    }
+  }
+  const memOutreach = memoryStore.outreach.filter(
+    (c) => Array.isArray(c.source_knowledge_ids) && c.source_knowledge_ids.some((kid: string) => obsIds.includes(kid))
+  );
+  const seenOutreachIds = new Set(outreach.map((o) => o.id));
+  outreach.push(...memOutreach.filter((o) => !seenOutreachIds.has(o.id)));
+
+  // Aggregate overall review status
+  const totalObs = observations.length;
+  const verifiedCount = observations.filter((o) => o.verification_status === 'VERIFIED').length;
+  const rejectedCount = observations.filter((o) => o.verification_status === 'REJECTED').length;
+  const reviewStatus = totalObs === 0
+    ? 'EMPTY'
+    : verifiedCount === totalObs
+    ? 'VERIFIED'
+    : rejectedCount === totalObs
+    ? 'REJECTED'
+    : verifiedCount > 0
+    ? 'PARTIALLY_VERIFIED'
+    : 'NEEDS_REVIEW';
+
+  const researcher = observations[0]?.created_by_name || 'Dr. Rajesh Sharma';
+
+  return {
+    job,
+    title: job.title || job.filename,
+    original_filename: job.original_filename || job.filename,
+    upload_date: job.started_at,
+    researcher,
+    review_status: reviewStatus,
+    overall_review_status: reviewStatus,
+    artifact_count: documents.length + observations.length + datasets.length + media.length,
+    counts: {
+      documents: documents.length,
+      observations: observations.length,
+      measurements: measurements.length,
+      datasets: datasets.length,
+      media: media.length,
+      evidence_links: evidenceLinks.length,
+      relationships: relationships.length,
+      outreach: outreach.length
+    },
+    documents,
+    observations,
+    measurements,
+    datasets,
+    media,
+    evidence_links: evidenceLinks,
+    relationships,
+    outreach
+  };
 }
 
 // -------------------------------------------------------------
@@ -216,13 +390,19 @@ export async function createDocument(
   return doc;
 }
 
-export async function getDocuments(): Promise<PolarDocument[]> {
+export async function getDocuments(filters?: { job_id?: string }): Promise<PolarDocument[]> {
   if (supabase) {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('documents')
         .select('*')
         .order('created_at', { ascending: false });
+
+      if (filters?.job_id) {
+        query = query.eq('processing_job_id', filters.job_id);
+      }
+
+      const { data, error } = await query;
 
       if (!error && data) {
         return data;
@@ -232,7 +412,11 @@ export async function getDocuments(): Promise<PolarDocument[]> {
     }
   }
 
-  return memoryStore.documents;
+  let list = memoryStore.documents;
+  if (filters?.job_id) {
+    list = list.filter((d) => d.processing_job_id === filters.job_id);
+  }
+  return list;
 }
 
 // -------------------------------------------------------------
@@ -282,13 +466,19 @@ export async function createDataset(dataset: Dataset): Promise<Dataset> {
   return dataset;
 }
 
-export async function getDatasets(): Promise<Dataset[]> {
+export async function getDatasets(filters?: { job_id?: string }): Promise<Dataset[]> {
   if (supabase) {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('datasets')
         .select('*')
         .order('created_at', { ascending: false });
+
+      if (filters?.job_id) {
+        query = query.eq('processing_job_id', filters.job_id);
+      }
+
+      const { data, error } = await query;
 
       if (!error && data) {
         const mapped = data.map((d) => ({
@@ -311,7 +501,11 @@ export async function getDatasets(): Promise<Dataset[]> {
     }
   }
 
-  return memoryStore.datasets;
+  let list = memoryStore.datasets;
+  if (filters?.job_id) {
+    list = list.filter((d) => d.processing_job_id === filters.job_id);
+  }
+  return list;
 }
 
 export async function getDatasetById(id: string): Promise<Dataset | null> {
@@ -389,12 +583,18 @@ export async function createMediaAsset(media: MediaAsset): Promise<MediaAsset> {
   return media;
 }
 
-export async function getMedia(type?: string): Promise<MediaAsset[]> {
+export async function getMedia(filters?: { type?: string; job_id?: string } | string): Promise<MediaAsset[]> {
+  const typeFilter = typeof filters === 'string' ? filters : filters?.type;
+  const jobFilter = typeof filters === 'object' ? filters?.job_id : undefined;
+
   if (supabase) {
     try {
       let query = supabase.from('media_assets').select('*').order('created_at', { ascending: false });
-      if (type) {
-        query = query.eq('type', type);
+      if (typeFilter) {
+        query = query.eq('type', typeFilter);
+      }
+      if (jobFilter) {
+        query = query.eq('processing_job_id', jobFilter);
       }
       const { data, error } = await query;
       if (!error && data) {
@@ -406,7 +606,8 @@ export async function getMedia(type?: string): Promise<MediaAsset[]> {
   }
 
   let list = [...memoryStore.media];
-  if (type) list = list.filter((m) => m.type === type);
+  if (typeFilter) list = list.filter((m) => m.type === typeFilter);
+  if (jobFilter) list = list.filter((m) => m.processing_job_id === jobFilter);
   return list;
 }
 

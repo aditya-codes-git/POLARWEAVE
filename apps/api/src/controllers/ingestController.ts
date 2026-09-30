@@ -11,6 +11,7 @@ import {
   updateProcessingJob,
   getProcessingJobs as fetchProcessingJobs,
   getProcessingJobById as fetchProcessingJobById,
+  getJobPackageData,
   createDocument,
   createDataset,
   createMediaAsset,
@@ -547,5 +548,64 @@ export async function getJobById(req: Request, res: Response) {
   return res.status(200).json({
     success: true,
     data: job
+  });
+}
+
+export async function getJobPackage(req: Request, res: Response) {
+  const id = String(req.params.id);
+  const pkg = await getJobPackageData(id);
+  if (!pkg) {
+    return res.status(404).json({
+      success: false,
+      error: { code: 'NOT_FOUND', message: `Research package for job ${id} not found.` }
+    });
+  }
+  return res.status(200).json({
+    success: true,
+    data: pkg
+  });
+}
+
+export async function updateJob(req: Request, res: Response) {
+  const id = String(req.params.id);
+  const existingJob = await fetchProcessingJobById(id);
+  if (!existingJob) {
+    return res.status(404).json({
+      success: false,
+      error: { code: 'NOT_FOUND', message: `Job ${id} not found.` }
+    });
+  }
+
+  // Authorization check:
+  // - Admin can rename any package
+  // - Researcher can rename their own package (or any package if created_by is unassigned)
+  const caller = req.user;
+  const isAdm = caller?.role === 'admin';
+  const isOwner = !existingJob.created_by || (caller?.id && existingJob.created_by === caller.id);
+
+  if (!isAdm && !isOwner) {
+    return res.status(403).json({
+      success: false,
+      error: { code: 'FORBIDDEN', message: 'You can only rename your own submitted packages.' }
+    });
+  }
+
+  const { title } = req.body;
+  if (!title || typeof title !== 'string' || !title.trim()) {
+    return res.status(400).json({
+      success: false,
+      error: { code: 'BAD_REQUEST', message: 'A non-empty package title is required.' }
+    });
+  }
+
+  const cleanTitle = title.trim();
+  const updated = await updateProcessingJob(id, {
+    title: cleanTitle,
+    original_filename: existingJob.original_filename || existingJob.filename
+  });
+
+  return res.status(200).json({
+    success: true,
+    data: updated
   });
 }
