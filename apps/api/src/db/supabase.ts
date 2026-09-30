@@ -32,17 +32,17 @@ if (hasSupabase && supabaseKey) {
 
 // In-Memory fallback store for rock-solid demo and resilience
 export class MemoryStore {
-  expeditions = [...DEMO_EXPEDITIONS];
-  locations = [...DEMO_LOCATIONS];
-  documents = [...DEMO_DOCUMENTS];
-  datasets = [...DEMO_DATASETS];
-  observations = [...DEMO_OBSERVATIONS];
-  measurements = [...DEMO_MEASUREMENTS];
-  media = [...DEMO_MEDIA];
-  evidenceLinks = [...DEMO_EVIDENCE_LINKS];
-  relationships = [...DEMO_RELATIONSHIPS];
-  outreach = [...DEMO_OUTREACH];
-  jobs = [...DEMO_JOBS];
+  expeditions: any[] = [];
+  locations: any[] = [];
+  documents: any[] = [];
+  datasets: any[] = [];
+  observations: any[] = [];
+  measurements: any[] = [];
+  media: any[] = [];
+  evidenceLinks: any[] = [];
+  relationships: any[] = [];
+  outreach: any[] = [];
+  jobs: any[] = [];
 }
 
 export const memoryStore = new MemoryStore();

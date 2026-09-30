@@ -20,19 +20,7 @@ export function queryAskTheEvidence(userQuery: string): GroundedQueryResult {
     return titleMatch || domainMatch || descMatch;
   });
 
-  // Check specific keywords for the central demo queries
-  if (!matchedObs) {
-    if (queryLower.includes('ice') || queryLower.includes('thickness') || queryLower.includes('1.8') || queryLower.includes('larsemann')) {
-      matchedObs = allObs.find((o) => o.id === 'obs_ice_thickness');
-    } else if (queryLower.includes('warm') || queryLower.includes('water') || queryLower.includes('prydz') || queryLower.includes('ocean')) {
-      matchedObs = allObs.find((o) => o.id === 'obs_warm_layer');
-    } else if (queryLower.includes('carbon') || queryLower.includes('aerosol') || queryLower.includes('maitri') || queryLower.includes('katabatic')) {
-      matchedObs = allObs.find((o) => o.id === 'obs_black_carbon');
-    } else if (queryLower.includes('snow') || queryLower.includes('arctic') || queryLower.includes('kongsfjorden')) {
-      matchedObs = allObs.find((o) => o.id === 'obs_arctic_snowpack');
-    }
-  }
-
+  // Check specific query keywords strictly against loaded observations
   if (!matchedObs) {
     return {
       answer: 'No verified polar knowledge matching this query was found in the repository.',

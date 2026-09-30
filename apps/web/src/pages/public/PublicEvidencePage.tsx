@@ -37,7 +37,7 @@ export function PublicEvidencePage() {
   useEffect(() => {
     getObservations()
       .then((obs) => {
-        const verified = obs.filter((o) => o.verification_status === 'VERIFIED' || o.demo);
+        const verified = obs.filter((o) => o.verification_status === 'VERIFIED');
         setObservations(verified);
         if (verified.length > 0) {
           handleSelectClaim(verified[0]);

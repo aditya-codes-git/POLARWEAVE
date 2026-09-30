@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Send,
   CheckCircle2,
@@ -10,6 +10,7 @@ import {
   Eye,
   ArrowRight
 } from 'lucide-react';
+import { getOutreachList } from '../../../lib/api';
 
 interface PublicationItem {
   id: string;
@@ -23,44 +24,25 @@ interface PublicationItem {
   summary: string;
 }
 
-const INITIAL_PUBLICATIONS: PublicationItem[] = [
-  {
-    id: 'pub_ice_45',
-    title: 'How Indian Scientists Measure Sea Ice in Antarctica: Fast-Ice at Bharati',
-    contentType: 'Student Explainer',
-    audience: 'Students & Schools',
-    citationCount: 4,
-    author: 'Dr. Rajesh Sharma',
-    submittedAt: '2026-03-28T10:30:00Z',
-    status: 'published',
-    summary: 'Audience-targeted explainer with locked citations linking to Report p.17, CSV row 42, and interview video.'
-  },
-  {
-    id: 'pub_warm_prydz',
-    title: 'Discovery of Subsurface Warm Water Intrusion in Prydz Bay Continental Shelf',
-    contentType: 'Scientific Press Dispatch',
-    audience: 'National Media & Journalists',
-    citationCount: 2,
-    author: 'Dr. Ananya Menon',
-    submittedAt: '2026-03-29T14:10:00Z',
-    status: 'pending',
-    summary: 'Details the Modified Circumpolar Deep Water (+0.4°C) measured at 150m depth off Bharati station.'
-  },
-  {
-    id: 'pub_aerosol_katabatic',
-    title: 'Episodic Black Carbon Transport During Katabatic Drainage Winds at Maitri',
-    contentType: 'Policy Brief',
-    audience: 'MoES Climate Decision Makers',
-    citationCount: 3,
-    author: 'Dr. Vikram Patel',
-    submittedAt: '2026-03-29T17:45:00Z',
-    status: 'pending',
-    summary: 'Analysis of 82.4 ng/m³ aerosol peak correlating plateau air discharge across Schirmacher Oasis.'
-  }
-];
-
 export function AdminPublishingPage() {
-  const [items, setItems] = useState<PublicationItem[]>(INITIAL_PUBLICATIONS);
+  const [items, setItems] = useState<PublicationItem[]>([]);
+
+  useEffect(() => {
+    getOutreachList().then((list) => {
+      const mapped: PublicationItem[] = list.map((item) => ({
+        id: item.id,
+        title: item.title,
+        contentType: item.content_type,
+        audience: item.audience,
+        citationCount: item.citations?.length || 0,
+        author: 'Researcher',
+        submittedAt: item.created_at || new Date().toISOString(),
+        status: (item.status === 'published' ? 'published' : 'pending') as any,
+        summary: item.summary || item.content?.slice(0, 150) || ''
+      }));
+      setItems(mapped);
+    });
+  }, []);
 
   const handlePublish = (id: string) => {
     setItems((prev) =>
@@ -105,11 +87,22 @@ export function AdminPublishingPage() {
 
       {/* Publications List */}
       <div className="space-y-4">
-        {items.map((item) => (
-          <div
-            key={item.id}
-            className="bg-white border border-slate-200 rounded-2xl p-5 shadow-subtle flex flex-col md:flex-row md:items-center justify-between gap-4 hover:border-slate-300 transition-colors"
-          >
+        {items.length === 0 ? (
+          <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center space-y-3 shadow-subtle">
+            <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center mx-auto border border-purple-200">
+              <Send className="w-6 h-6" />
+            </div>
+            <h2 className="text-base font-bold text-slate-900">No Publications Pending Release</h2>
+            <p className="text-xs text-slate-500 max-w-md mx-auto">
+              No outreach stories or dissemination briefs have been generated yet. When researchers create content in Outreach Studio, it will appear here for institutional sign-off.
+            </p>
+          </div>
+        ) : (
+          items.map((item) => (
+            <div
+              key={item.id}
+              className="bg-white border border-slate-200 rounded-2xl p-5 shadow-subtle flex flex-col md:flex-row md:items-center justify-between gap-4 hover:border-slate-300 transition-colors"
+            >
             <div className="space-y-1.5 max-w-2xl">
               <div className="flex items-center gap-2">
                 <span className="text-[10px] font-mono uppercase font-semibold text-polar-700 bg-polar-50 px-2 py-0.5 rounded border border-polar-200">
@@ -146,8 +139,9 @@ export function AdminPublishingPage() {
               )}
             </div>
           </div>
-        ))}
-      </div>
+        ))
+      )}
+    </div>
     </div>
   );
 }

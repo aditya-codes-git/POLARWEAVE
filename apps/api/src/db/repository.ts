@@ -134,8 +134,7 @@ export async function getProcessingJobs(): Promise<ProcessingJob[]> {
         .select('*')
         .order('started_at', { ascending: false });
 
-      if (!error && data && data.length > 0) {
-        // Merge with memoryStore demo jobs if not present
+      if (!error && data) {
         const dbJobIds = new Set(data.map((j) => j.id));
         const extraMemJobs = memoryStore.jobs.filter((j) => !dbJobIds.has(j.id));
         return [...data, ...extraMemJobs];
@@ -227,7 +226,7 @@ export async function getDocuments(): Promise<PolarDocument[]> {
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (!error && data && data.length > 0) {
+      if (!error && data) {
         const dbDocIds = new Set(data.map((d) => d.id));
         const extraMemDocs = memoryStore.documents.filter((d) => !dbDocIds.has(d.id));
         return [...data, ...extraMemDocs];
@@ -295,7 +294,7 @@ export async function getDatasets(): Promise<Dataset[]> {
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (!error && data && data.length > 0) {
+      if (!error && data) {
         const dbIds = new Set(data.map((d) => d.id));
         const extraMem = memoryStore.datasets.filter((d) => !dbIds.has(d.id));
         const mapped = data.map((d) => ({
@@ -404,7 +403,7 @@ export async function getMedia(type?: string): Promise<MediaAsset[]> {
         query = query.eq('type', type);
       }
       const { data, error } = await query;
-      if (!error && data && data.length > 0) {
+      if (!error && data) {
         const dbIds = new Set(data.map((m) => m.id));
         const extraMem = memoryStore.media.filter(
           (m) => !dbIds.has(m.id) && (!type || m.type === type)
@@ -903,9 +902,10 @@ export async function getKnowledgeGraphData(filters?: { jobId?: string; scope?: 
     } catch (e: any) {
       console.warn('[POLARWEAVE DB] Error fetching job assets for graph:', e?.message);
     }
-  } else if (!isJobScoped && !isRealOnly) {
+  } else if (!isJobScoped) {
     datasets = await getDatasets();
     media = await getMedia();
+    docs = await getDocuments();
   }
 
   docs.forEach((doc, idx) => {
@@ -1165,7 +1165,7 @@ export async function getGeneratedContent(): Promise<GeneratedContent[]> {
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (!error && data && data.length > 0) {
+      if (!error && data) {
         const dbIds = new Set(data.map((c) => c.id));
         const extraMem = memoryStore.outreach.filter((c) => !dbIds.has(c.id));
         return [...data, ...extraMem];

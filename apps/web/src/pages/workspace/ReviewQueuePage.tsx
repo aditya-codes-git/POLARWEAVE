@@ -14,8 +14,8 @@ import {
   Sparkles,
   Info
 } from 'lucide-react';
-import { getObservations } from '../../lib/api';
-import { Observation } from '@polarweave/types';
+import { getObservations, getProcessingJobs } from '../../lib/api';
+import { Observation, ProcessingJob } from '@polarweave/types';
 import { VerificationBadge, ConfidenceBadge, DomainBadge } from '../../components/ui/badges';
 import { useRole } from '../../context/RoleContext';
 
@@ -26,22 +26,28 @@ export function ReviewQueuePage() {
   const { role } = useRole();
 
   const [observations, setObservations] = useState<Observation[]>([]);
+  const [jobs, setJobs] = useState<ProcessingJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [scope, setScope] = useState<'real' | 'demo' | 'all'>(jobId ? 'real' : 'real');
   const [filter, setFilter] = useState<'all' | 'needs_review' | 'verified'>('all');
 
   useEffect(() => {
     setLoading(true);
-    getObservations({
-      job_id: jobId || undefined,
-      scope: jobId ? 'real' : scope
-    })
-      .then((data) => {
-        setObservations(data);
+    Promise.all([
+      getObservations({
+        job_id: jobId || undefined,
+        scope: jobId ? 'real' : scope
+      }),
+      getProcessingJobs()
+    ])
+      .then(([obsData, jobsData]) => {
+        setObservations(obsData);
+        setJobs(jobsData || []);
       })
       .catch((err) => {
-        console.error('Failed to load observations:', err);
+        console.error('Failed to load observations or jobs:', err);
         setObservations([]);
+        setJobs([]);
       })
       .finally(() => setLoading(false));
   }, [jobId, scope]);
@@ -165,6 +171,42 @@ export function ReviewQueuePage() {
           </button>
         </div>
       )}
+
+      {/* Compact Operational Processing Status */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-subtle flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-xl bg-polar-50 text-polar-600 flex items-center justify-center border border-polar-200 shrink-0">
+            <Layers className="w-4 h-4" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-800">Operational Processing Pipeline</span>
+              <span className="text-[10px] font-mono px-2 py-0.2 rounded font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 uppercase">
+                {jobs.filter((j) => j.status === 'processing' || j.status === 'queued').length > 0
+                  ? `${jobs.filter((j) => j.status === 'processing' || j.status === 'queued').length} In-Flight`
+                  : 'All Jobs Processed'}
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-500">
+              {jobs.length === 0
+                ? 'No ingestion runs recorded. New uploads automatically flow through deterministic multimodal parsing.'
+                : `Latest run: ${jobs[0]?.filename || 'Upload'} (${jobs[0]?.status || 'completed'}) • ${jobs.length} total ingest jobs tracked`}
+            </p>
+          </div>
+        </div>
+
+        {jobs.length > 0 && (
+          <div className="flex items-center gap-2 self-end md:self-center shrink-0">
+            <button
+              onClick={() => navigate(`/workspace/processing?jobId=${jobs[0].id}`)}
+              className="text-xs font-semibold text-polar-700 hover:text-polar-900 bg-polar-50 hover:bg-polar-100 px-3 py-1.5 rounded-xl border border-polar-200 transition-colors flex items-center gap-1.5"
+            >
+              <span>Inspect Latest Run ({jobs[0].id})</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+      </div>
 
       {/* Observation Cards */}
       <div className="bg-white border border-slate-200 rounded-2xl shadow-subtle divide-y divide-slate-100 overflow-hidden">

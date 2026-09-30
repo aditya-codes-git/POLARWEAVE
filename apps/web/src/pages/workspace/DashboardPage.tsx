@@ -18,8 +18,8 @@ import {
   Send,
   Users
 } from 'lucide-react';
-import { getObservations, getExpeditions, getDatasets, getMedia } from '../../lib/api';
-import { Observation, Expedition, Dataset, MediaAsset } from '@polarweave/types';
+import { getObservations, getExpeditions, getDatasets, getMedia, getEvidenceTrace, getProcessingJobs } from '../../lib/api';
+import { Observation, Expedition, Dataset, MediaAsset, EvidenceLink, ProcessingJob } from '@polarweave/types';
 import { ConfidenceBadge, VerificationBadge, DomainBadge } from '../../components/ui/badges';
 import { EvidenceDrawer } from '../../components/EvidenceDrawer';
 import { useRole } from '../../context/RoleContext';
@@ -32,22 +32,26 @@ export function DashboardPage() {
   const [expeditions, setExpeditions] = useState<Expedition[]>([]);
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [media, setMedia] = useState<MediaAsset[]>([]);
+  const [jobs, setJobs] = useState<ProcessingJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedObsForEvidence, setSelectedObsForEvidence] = useState<Observation | null>(null);
+  const [drawerLinks, setDrawerLinks] = useState<EvidenceLink[]>([]);
 
   useEffect(() => {
     async function loadData() {
       try {
-        const [obs, exps, dts, med] = await Promise.all([
+        const [obs, exps, dts, med, jobList] = await Promise.all([
           getObservations(),
           getExpeditions(),
           getDatasets(),
-          getMedia()
+          getMedia(),
+          getProcessingJobs()
         ]);
         setObservations(obs);
         setExpeditions(exps);
         setDatasets(dts);
         setMedia(med);
+        setJobs(jobList);
       } catch (e) {
         console.error(e);
       } finally {
@@ -92,7 +96,9 @@ export function DashboardPage() {
               className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold shadow-sm transition-all"
             >
               <FileCheck className="w-4 h-4 text-amber-400" />
-              <span>Review Queue (8 Awaiting)</span>
+              <span>
+                Review Queue ({observations.filter((o) => o.verification_status === 'NEEDS_REVIEW' || o.verification_status === 'AI_EXTRACTED').length} Awaiting)
+              </span>
             </button>
             <button
               onClick={() => navigate('/workspace/admin/publishing')}
@@ -116,7 +122,9 @@ export function DashboardPage() {
               </span>
               <Clock className="w-4 h-4" />
             </div>
-            <div className="text-2xl font-bold text-slate-900">8</div>
+            <div className="text-2xl font-bold text-slate-900">
+              {observations.filter((o) => o.verification_status === 'NEEDS_REVIEW' || o.verification_status === 'AI_EXTRACTED').length}
+            </div>
             <div className="text-[11px] text-amber-700 mt-1 flex items-center gap-1">
               <span>Primary operational queue</span>
               <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
@@ -129,26 +137,26 @@ export function DashboardPage() {
           >
             <div className="flex items-center justify-between text-purple-700 mb-1">
               <span className="text-[11px] font-mono uppercase tracking-wider font-bold">
-                Pending Publication
+                Total Datasets
               </span>
-              <Send className="w-4 h-4" />
+              <Database className="w-4 h-4" />
             </div>
-            <div className="text-2xl font-bold text-slate-900">3</div>
-            <div className="text-[11px] text-purple-700 mt-1">Outreach dispatches ready</div>
+            <div className="text-2xl font-bold text-slate-900">{datasets.length}</div>
+            <div className="text-[11px] text-purple-700 mt-1">Calibrated sensor streams</div>
           </div>
 
           <div
-            onClick={() => navigate('/workspace/admin/activity')}
-            className="p-5 bg-white border border-slate-200 rounded-2xl shadow-subtle hover:border-rose-400 transition-colors cursor-pointer"
+            onClick={() => navigate('/workspace/media')}
+            className="p-5 bg-white border border-slate-200 rounded-2xl shadow-subtle hover:border-blue-400 transition-colors cursor-pointer"
           >
             <div className="flex items-center justify-between text-slate-500 mb-1">
               <span className="text-[11px] font-mono uppercase tracking-wider font-semibold">
-                Failed Processing
+                Media Assets
               </span>
-              <AlertTriangle className="w-4 h-4 text-rose-500" />
+              <Film className="w-4 h-4 text-blue-500" />
             </div>
-            <div className="text-2xl font-bold text-slate-900">2</div>
-            <div className="text-[11px] text-rose-600 mt-1">Audio codec retries queued</div>
+            <div className="text-2xl font-bold text-slate-900">{media.length}</div>
+            <div className="text-[11px] text-slate-600 mt-1">Multimodal media records</div>
           </div>
 
           <div className="p-5 bg-white border border-slate-200 rounded-2xl shadow-subtle">
@@ -158,7 +166,9 @@ export function DashboardPage() {
               </span>
               <CheckCircle2 className="w-4 h-4" />
             </div>
-            <div className="text-2xl font-bold text-slate-900">42</div>
+            <div className="text-2xl font-bold text-slate-900">
+              {observations.filter((o) => o.verification_status === 'VERIFIED').length}
+            </div>
             <div className="text-[11px] text-emerald-600 mt-1">100% cryptographically logged</div>
           </div>
         </div>
@@ -180,40 +190,46 @@ export function DashboardPage() {
                 onClick={() => navigate('/workspace/review')}
                 className="text-xs font-semibold text-polar-700 hover:text-polar-900 flex items-center gap-1"
               >
-                <span>View All 8 Items</span>
+                <span>View Queue ({observations.filter((o) => o.verification_status !== 'VERIFIED').length})</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>
 
             <div className="divide-y divide-slate-100">
-              {observations.slice(0, 3).map((obs) => (
-                <div
-                  key={obs.id}
-                  onClick={() => navigate(`/workspace/review/${obs.id}`)}
-                  className="py-3.5 flex items-center justify-between gap-4 hover:bg-slate-50/70 p-2 rounded-xl transition-colors cursor-pointer group"
-                >
-                  <div className="space-y-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <DomainBadge domain={obs.research_domain} />
-                      <span className="text-xs text-slate-400">•</span>
-                      <span className="text-xs text-slate-500 truncate">{obs.location_name}</span>
-                    </div>
-                    <div className="text-xs font-semibold text-slate-900 group-hover:text-polar-700 transition-colors truncate">
-                      {obs.title}
-                    </div>
-                    <div className="text-[11px] text-slate-400">
-                      Author: Dr. Rajesh Sharma • 4 linked evidence modalities
-                    </div>
-                  </div>
-
-                  <div className="shrink-0 flex items-center gap-2">
-                    <VerificationBadge status={obs.verification_status} />
-                    <button className="text-xs font-medium text-polar-700 bg-polar-50 hover:bg-polar-100 px-3 py-1 rounded-lg border border-polar-200 transition-colors">
-                      Review
-                    </button>
-                  </div>
+              {observations.length === 0 ? (
+                <div className="py-8 text-center text-xs text-slate-400">
+                  No observations pending review. Ingest new files to begin verification.
                 </div>
-              ))}
+              ) : (
+                observations.slice(0, 5).map((obs) => (
+                  <div
+                    key={obs.id}
+                    onClick={() => navigate(`/workspace/review/${obs.id}`)}
+                    className="py-3.5 flex items-center justify-between gap-4 hover:bg-slate-50/70 p-2 rounded-xl transition-colors cursor-pointer group"
+                  >
+                    <div className="space-y-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <DomainBadge domain={obs.research_domain} />
+                        <span className="text-xs text-slate-400">•</span>
+                        <span className="text-xs text-slate-500 truncate">{obs.location_name || 'Unspecified Location'}</span>
+                      </div>
+                      <div className="text-xs font-semibold text-slate-900 group-hover:text-polar-700 transition-colors truncate">
+                        {obs.title}
+                      </div>
+                      <div className="text-[11px] text-slate-400">
+                        {obs.source_file_name ? `Source: ${obs.source_file_name}` : 'Uploaded finding'}
+                      </div>
+                    </div>
+
+                    <div className="shrink-0 flex items-center gap-2">
+                      <VerificationBadge status={obs.verification_status} />
+                      <button className="text-xs font-medium text-polar-700 bg-polar-50 hover:bg-polar-100 px-3 py-1 rounded-lg border border-polar-200 transition-colors">
+                        Review
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
 
@@ -268,6 +284,48 @@ export function DashboardPage() {
                 <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
               </button>
             </div>
+
+            {/* Compact Ingestion & Processing Status */}
+            <div className="pt-3 border-t border-slate-100">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-mono uppercase tracking-wider font-semibold text-slate-500 flex items-center gap-1.5">
+                  <Layers className="w-3.5 h-3.5 text-polar-600" />
+                  Ingestion Pipeline Status
+                </span>
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold">
+                  {jobs.filter((j) => j.status === 'processing' || j.status === 'queued').length > 0
+                    ? `${jobs.filter((j) => j.status === 'processing' || j.status === 'queued').length} Active`
+                    : 'Idle / Healthy'}
+                </span>
+              </div>
+              <div className="space-y-1.5">
+                {jobs.length === 0 ? (
+                  <p className="text-[11px] text-slate-400">No background ingestion jobs logged.</p>
+                ) : (
+                  jobs.slice(0, 2).map((j) => (
+                    <div
+                      key={j.id}
+                      onClick={() => navigate(`/workspace/processing?jobId=${j.id}`)}
+                      className="p-2 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-100 flex items-center justify-between text-[11px] cursor-pointer transition-colors"
+                    >
+                      <div className="min-w-0 pr-2">
+                        <span className="font-medium text-slate-800 truncate block">{j.filename}</span>
+                        <span className="text-[10px] font-mono text-slate-400">{j.id}</span>
+                      </div>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono shrink-0 uppercase font-semibold ${
+                        j.status === 'completed'
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : j.status === 'failed'
+                          ? 'bg-red-100 text-red-800'
+                          : 'bg-amber-100 text-amber-800 animate-pulse'
+                      }`}>
+                        {j.status}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -277,8 +335,8 @@ export function DashboardPage() {
   // ==========================================
   // RESEARCHER DASHBOARD (CREATE)
   // ==========================================
-  const needsReviewCount = 1;
-  const verifiedCount = 4;
+  const needsReviewCount = observations.filter((o) => o.verification_status === 'NEEDS_REVIEW' || o.verification_status === 'AI_EXTRACTED').length;
+  const verifiedCount = observations.filter((o) => o.verification_status === 'VERIFIED').length;
 
   return (
     <div className="max-w-7xl mx-auto space-y-8">
@@ -286,7 +344,7 @@ export function DashboardPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-            Good morning, Dr. Rajesh
+            Good morning, {user?.name || 'Researcher'}
           </h1>
           <p className="text-sm text-slate-500 mt-1">
             Here's the state of your research material.
@@ -311,7 +369,7 @@ export function DashboardPage() {
         </div>
       </div>
 
-      {/* 2. KNOWLEDGE PIPELINE (Section 3 & 26: 5 uploads, 2 processing, 1 needs review, 4 verified) */}
+      {/* 2. KNOWLEDGE PIPELINE (Dynamic) */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-subtle">
         <div className="flex items-center justify-between mb-4">
           <div>
@@ -323,56 +381,47 @@ export function DashboardPage() {
             </p>
           </div>
           <span className="text-xs font-mono text-polar-700 bg-polar-50 px-2 py-0.5 rounded border border-polar-200">
-            Expedition 45 Contributor
+            Active Workspace
           </span>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {/* Step 1 */}
           <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200/80">
             <div className="text-[11px] font-mono text-slate-400 uppercase tracking-wider mb-1">
-              1. My Uploads
+              1. Datasets & Media
             </div>
-            <div className="text-xl font-bold text-slate-900">5</div>
-            <div className="text-[11px] text-slate-500 mt-1">PDF, CSV, MP4, EXIF</div>
+            <div className="text-xl font-bold text-slate-900">{datasets.length + media.length}</div>
+            <div className="text-[11px] text-slate-500 mt-1">{datasets.length} CSVs, {media.length} Media</div>
           </div>
 
           {/* Step 2 */}
           <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200/80">
             <div className="text-[11px] font-mono text-slate-400 uppercase tracking-wider mb-1">
-              2. Processing
+              2. Total Observations
             </div>
-            <div className="text-xl font-bold text-slate-900">2</div>
-            <div className="text-[11px] text-slate-500 mt-1">LLM Structuring</div>
+            <div className="text-xl font-bold text-slate-900">{observations.length}</div>
+            <div className="text-[11px] text-slate-500 mt-1">Structured findings</div>
           </div>
 
           {/* Step 3 */}
           <div className="p-3.5 bg-amber-50/60 rounded-xl border border-amber-200/80">
             <div className="text-[11px] font-mono text-amber-700 uppercase tracking-wider mb-1 flex items-center gap-1">
               <Clock className="w-3 h-3" />
-              <span>3. Needs Review</span>
+              <span>3. Awaiting Admin Review</span>
             </div>
-            <div className="text-xl font-bold text-amber-900">1</div>
-            <div className="text-[11px] text-amber-700 mt-1">Awaiting My Sign-off</div>
+            <div className="text-xl font-bold text-amber-900">{needsReviewCount}</div>
+            <div className="text-[11px] text-amber-700 mt-1">Pending Governance</div>
           </div>
 
           {/* Step 4 */}
           <div className="p-3.5 bg-emerald-50/60 rounded-xl border border-emerald-200/80">
             <div className="text-[11px] font-mono text-emerald-700 uppercase tracking-wider mb-1 flex items-center gap-1">
               <CheckCircle2 className="w-3 h-3" />
-              <span>4. Verified</span>
+              <span>4. Verified Findings</span>
             </div>
-            <div className="text-xl font-bold text-emerald-900">4</div>
-            <div className="text-[11px] text-emerald-700 mt-1">Author Verified</div>
-          </div>
-
-          {/* Step 5 */}
-          <div className="p-3.5 bg-polar-50/60 rounded-xl border border-polar-200/80">
-            <div className="text-[11px] font-mono text-polar-700 uppercase tracking-wider mb-1">
-              5. Published
-            </div>
-            <div className="text-xl font-bold text-polar-900">12</div>
-            <div className="text-[11px] text-polar-700 mt-1">Public Dispatches</div>
+            <div className="text-xl font-bold text-emerald-900">{verifiedCount}</div>
+            <div className="text-[11px] text-emerald-700 mt-1">Locked by Admin</div>
           </div>
         </div>
       </div>
@@ -400,42 +449,51 @@ export function DashboardPage() {
           </div>
 
           <div className="space-y-3">
-            {observations.slice(0, 3).map((obs) => (
-              <div
-                key={obs.id}
-                className="p-4 rounded-xl border border-slate-200/80 bg-slate-50/40 hover:bg-slate-50 transition-colors space-y-2"
-              >
-                <div className="flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-2">
-                    <DomainBadge domain={obs.research_domain} />
-                    <span className="text-slate-400">•</span>
-                    <span className="text-slate-500">{obs.location_name}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <ConfidenceBadge confidence={obs.confidence} />
-                    <VerificationBadge status={obs.verification_status} />
-                  </div>
-                </div>
-
-                <h4 className="text-xs font-bold text-slate-900">{obs.title}</h4>
-                <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed">
-                  {obs.description}
-                </p>
-
-                <div className="pt-2 flex items-center justify-between border-t border-slate-200/60 text-xs">
-                  <span className="text-[11px] font-mono text-slate-400">
-                    Source: Report p.17 • CSV row 42
-                  </span>
-                  <button
-                    onClick={() => setSelectedObsForEvidence(obs)}
-                    className="text-polar-700 hover:text-polar-900 font-semibold flex items-center gap-1 text-[11px]"
-                  >
-                    <Shield className="w-3 h-3" />
-                    <span>Show Evidence</span>
-                  </button>
-                </div>
+            {observations.length === 0 ? (
+              <div className="py-8 text-center text-xs text-slate-400">
+                No observations yet. Ingest research files to extract structured scientific knowledge.
               </div>
-            ))}
+            ) : (
+              observations.slice(0, 4).map((obs) => (
+                <div
+                  key={obs.id}
+                  className="p-4 rounded-xl border border-slate-200/80 bg-slate-50/40 hover:bg-slate-50 transition-colors space-y-2"
+                >
+                  <div className="flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2">
+                      <DomainBadge domain={obs.research_domain} />
+                      <span className="text-slate-400">•</span>
+                      <span className="text-slate-500">{obs.location_name || 'Unspecified Location'}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <ConfidenceBadge confidence={obs.confidence} />
+                      <VerificationBadge status={obs.verification_status} />
+                    </div>
+                  </div>
+
+                  <h4 className="text-xs font-bold text-slate-900">{obs.title}</h4>
+                  <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed">
+                    {obs.description}
+                  </p>
+
+                  <div className="pt-2 flex items-center justify-between border-t border-slate-200/60 text-xs">
+                    <span className="text-[11px] font-mono text-slate-400">
+                      {obs.source_file_name ? `Source: ${obs.source_file_name}` : 'Uploaded document'}
+                    </span>
+                    <button
+                      onClick={() => {
+                        setSelectedObsForEvidence(obs);
+                        getEvidenceTrace(obs.id).then((t) => setDrawerLinks(t.evidence_chain || []));
+                      }}
+                      className="text-polar-700 hover:text-polar-900 font-semibold flex items-center gap-1 text-[11px]"
+                    >
+                      <Shield className="w-3 h-3" />
+                      <span>Show Evidence</span>
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
 
@@ -446,29 +504,32 @@ export function DashboardPage() {
           </h3>
 
           <div className="space-y-2.5 text-xs">
-            <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-between">
-              <div className="flex items-center gap-2 min-w-0">
-                <FileText className="w-4 h-4 text-rose-600 shrink-0" />
-                <span className="font-medium text-slate-800 truncate">report_expedition_45_final.pdf</span>
+            {datasets.length === 0 && media.length === 0 ? (
+              <div className="py-6 text-center text-slate-400 text-xs">
+                No recent files uploaded.
               </div>
-              <span className="text-[10px] text-emerald-600 font-mono shrink-0">Parsed</span>
-            </div>
-
-            <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-between">
-              <div className="flex items-center gap-2 min-w-0">
-                <Database className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span className="font-medium text-slate-800 truncate">ice_measurements_larsemann.csv</span>
-              </div>
-              <span className="text-[10px] text-emerald-600 font-mono shrink-0">1,420 rows</span>
-            </div>
-
-            <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-between">
-              <div className="flex items-center gap-2 min-w-0">
-                <Film className="w-4 h-4 text-blue-600 shrink-0" />
-                <span className="font-medium text-slate-800 truncate">scientist_interview.mp4</span>
-              </div>
-              <span className="text-[10px] text-polar-600 font-mono shrink-0">12:43 timestamp</span>
-            </div>
+            ) : (
+              <>
+                {datasets.slice(0, 2).map((d) => (
+                  <div key={d.id} className="p-3 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-between">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Database className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span className="font-medium text-slate-800 truncate">{d.filename}</span>
+                    </div>
+                    <span className="text-[10px] text-emerald-600 font-mono shrink-0">{d.row_count} rows</span>
+                  </div>
+                ))}
+                {media.slice(0, 2).map((m) => (
+                  <div key={m.id} className="p-3 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-between">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Film className="w-4 h-4 text-blue-600 shrink-0" />
+                      <span className="font-medium text-slate-800 truncate">{m.filename}</span>
+                    </div>
+                    <span className="text-[10px] text-polar-600 font-mono shrink-0">{m.type.toUpperCase()}</span>
+                  </div>
+                ))}
+              </>
+            )}
           </div>
 
           <div className="pt-2">
@@ -487,38 +548,14 @@ export function DashboardPage() {
       {selectedObsForEvidence && (
         <EvidenceDrawer
           isOpen={Boolean(selectedObsForEvidence)}
-          onClose={() => setSelectedObsForEvidence(null)}
+          onClose={() => {
+            setSelectedObsForEvidence(null);
+            setDrawerLinks([]);
+          }}
           knowledgeTitle={selectedObsForEvidence.title}
           confidence={selectedObsForEvidence.confidence}
           verificationStatus={selectedObsForEvidence.verification_status}
-          evidenceLinks={[
-            {
-              id: 'evi_obs1_report',
-              knowledge_type: 'observation',
-              knowledge_id: selectedObsForEvidence.id,
-              source_type: 'pdf',
-              source_id: 'doc_exp45_report',
-              source_title: 'report_expedition_45_final.pdf',
-              page_number: 17,
-              excerpt: 'Section 3.2.1 Coastal Fast-Ice Monitoring: In-situ mechanical core extraction yielded uncompressed sea-ice thickness of 1.80 m (±0.02 m).',
-              confidence: 0.96,
-              verification_status: selectedObsForEvidence.verification_status,
-              created_at: new Date().toISOString()
-            },
-            {
-              id: 'evi_obs1_dataset',
-              knowledge_type: 'observation',
-              knowledge_id: selectedObsForEvidence.id,
-              source_type: 'dataset',
-              source_id: 'dts_ice_measurements',
-              source_title: 'ice_measurements_larsemann.csv',
-              row_number: 42,
-              excerpt: 'Row 42: core_id=IC-45-42, depth_m=21.0, ice_thickness_m=1.80, temp_c=-14.8°C.',
-              confidence: 0.98,
-              verification_status: selectedObsForEvidence.verification_status,
-              created_at: new Date().toISOString()
-            }
-          ]}
+          evidenceLinks={drawerLinks}
           onApprove={() => {
             setObservations((prev) =>
               prev.map((o) => (o.id === selectedObsForEvidence.id ? { ...o, verification_status: 'VERIFIED' } : o))

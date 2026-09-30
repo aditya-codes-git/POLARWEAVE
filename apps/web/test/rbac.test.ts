@@ -36,7 +36,9 @@ test('RBAC Suite — Role Definitions & Navigation Isolation', async (t) => {
     assert.ok(adminItemIds.includes('users'), 'Admin must have Users');
     assert.ok(adminItemIds.includes('taxonomy'), 'Admin must have Taxonomy');
     assert.ok(adminItemIds.includes('publishing'), 'Admin must have Publishing');
-    assert.ok(adminItemIds.includes('activity'), 'Admin must have System Activity');
+    assert.ok(adminItemIds.includes('activity'), 'Admin must have Activity');
+    assert.ok(adminItemIds.includes('analytics'), 'Admin must have Analytics');
+    assert.ok(adminItemIds.includes('settings'), 'Admin must have Settings');
   });
 
   await t.test('TEST 3: Public Explorer has editorial discovery sidebar and NEVER sees internal tools', () => {

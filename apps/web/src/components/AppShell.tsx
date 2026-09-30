@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   Sparkles,
@@ -17,6 +17,7 @@ import { CommandPalette } from './CommandPalette';
 import { AskTheEvidenceModal } from './AskTheEvidenceModal';
 import { useRole, UserRole, DEMO_PROFILES } from '../context/RoleContext';
 import { getNavigationForRole, NavigationItem } from '../config/navigation';
+import { getObservations } from '../lib/api';
 
 export function AppShell() {
   const location = useLocation();
@@ -27,6 +28,20 @@ export function AppShell() {
   const [isAskModalOpen, setIsAskModalOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [pendingReviewCount, setPendingReviewCount] = useState<number>(0);
+
+  useEffect(() => {
+    if (role === 'admin' || role === 'researcher') {
+      getObservations()
+        .then((obs) => {
+          const pending = obs.filter(
+            (o) => o.verification_status === 'NEEDS_REVIEW' || o.verification_status === 'AI_EXTRACTED'
+          );
+          setPendingReviewCount(pending.length);
+        })
+        .catch(() => setPendingReviewCount(0));
+    }
+  }, [role, location.pathname]);
 
   const navigationSections = getNavigationForRole(role);
 
@@ -118,11 +133,17 @@ export function AppShell() {
                   {item.badge}
                 </span>
               )}
-              {item.count !== undefined && (
-                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 border border-amber-300 font-semibold">
-                  {item.count}
-                </span>
-              )}
+              {(() => {
+                const count = item.id === 'review' ? pendingReviewCount : item.count;
+                if (count !== undefined && count > 0) {
+                  return (
+                    <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 border border-amber-300 font-semibold">
+                      {count}
+                    </span>
+                  );
+                }
+                return null;
+              })()}
             </div>
           </NavLink>
         );

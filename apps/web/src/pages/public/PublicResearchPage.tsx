@@ -36,58 +36,7 @@ interface Publication {
   dataset_id?: string;
 }
 
-const PUBLIC_PUBLICATIONS: Publication[] = [
-  {
-    id: 'pub_ice_dynamics_2026',
-    title: 'Seasonal Fast-Ice Thickness Profiling and Radar Sounding Calibration in the Larsemann Hills Sector, East Antarctica',
-    authors: ['Dr. Rajesh Sharma', 'Dr. P. Sen', 'Dr. Sunita Bose'],
-    year: 2026,
-    domain: 'Glaciology',
-    journal: 'Polar Science Journal (NCPOR Technical Series)',
-    doi: '10.1016/j.polar.2026.01.014',
-    expedition_code: 'EXP-45-ANT',
-    abstract: 'In-situ electromechanical drilling and ground-penetrating radar profiling at 24 coastal transects near Bharati Station established an average fast-ice thickness of 1.80 m (±0.02 m), providing baseline cryospheric stability metrics against Katabatic wind loading.',
-    source_count: 3,
-    dataset_id: 'dts_ice_measurements'
-  },
-  {
-    id: 'pub_mcdw_ocean_2026',
-    title: 'Hydrographic Evidence of Subsurface Modified Circumpolar Deep Water (MCDW) Intrusion into Prydz Bay Inner Trench',
-    authors: ['Dr. Ananya Roy', 'Dr. Rajesh Sharma', 'MoES Hydrography Group'],
-    year: 2026,
-    domain: 'Oceanography',
-    journal: 'Deep-Sea Research Part II: Polar Oceanography',
-    doi: '10.1016/j.dsr2.2026.104921',
-    expedition_code: 'EXP-45-ANT',
-    abstract: 'High-resolution CTD and dissolved oxygen transects across the continental shelf slope identified episodic warm core pulses (+0.42°C) at 150m depth propagating toward the Amery Ice Shelf grounding cavity.',
-    source_count: 2,
-    dataset_id: 'dts_prydz_ctd'
-  },
-  {
-    id: 'pub_black_carbon_2026',
-    title: 'Episodic Katabatic Drainage Events Regulate Black Carbon Aerosol Mass Loading at Maitri Station',
-    authors: ['Dr. Vikram Patel', 'MoES Atmospheric Physics Cell'],
-    year: 2026,
-    domain: 'Atmospheric Sciences',
-    journal: 'Atmospheric Chemistry & Physics (Copernicus)',
-    doi: '10.5194/acp-2026-104',
-    expedition_code: 'EXP-45-ANT',
-    abstract: 'Continuous 7-wavelength aethalometer monitoring demonstrated acute aerosol surges exceeding 80 ng/m³ synchronous with high-velocity downslope drainage windstorms traversing Queen Maud Land.',
-    source_count: 2
-  },
-  {
-    id: 'pub_kongsfjorden_snow_2025',
-    title: 'Advancement of Snowmelt Timing and Albedo Decay Dynamics at Ny-Ålesund, Svalbard',
-    authors: ['Dr. K. Nambiar', 'Arctic Cryosphere Group'],
-    year: 2025,
-    domain: 'Cryosphere Dynamics',
-    journal: 'The Cryosphere',
-    doi: '10.5194/tc-2025-88',
-    expedition_code: 'EXP-ARCTIC-25',
-    abstract: 'Radiometric net radiometer towers at Himadri Station captured a 9-day shift in seasonal snowpack melting onset, accelerating early summer radiative feedback in the high Arctic fjord ecosystem.',
-    source_count: 2
-  }
-];
+const PUBLIC_PUBLICATIONS: Publication[] = [];
 
 export function PublicResearchPage() {
   const navigate = useNavigate();

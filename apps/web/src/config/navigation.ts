@@ -14,6 +14,8 @@ import {
   GitBranch,
   Send,
   Cpu,
+  BarChart3,
+  Settings,
   Globe,
   BookOpen,
   Sparkles,
@@ -45,7 +47,7 @@ export const researcherNavigation: NavigationSection[] = [
       { id: 'overview', label: 'Overview', to: '/workspace', icon: Activity, exact: true },
       { id: 'ingest', label: 'Ingest', to: '/workspace/ingest', icon: UploadCloud, badge: 'Hero' },
       { id: 'processing', label: 'Processing Queue', to: '/workspace/processing', icon: Layers },
-      { id: 'review', label: 'Review Queue', to: '/workspace/review', icon: FileCheck, count: 1 },
+      { id: 'review', label: 'Review Queue', to: '/workspace/review', icon: FileCheck },
       { id: 'evidence', label: 'Evidence Trace', to: '/workspace/evidence', icon: Shield, highlight: true },
       { id: 'knowledge', label: 'Knowledge Graph', to: '/workspace/knowledge', icon: Compass },
       { id: 'expeditions', label: 'Expeditions', to: '/workspace/expeditions', icon: Compass },
@@ -62,9 +64,7 @@ export const adminNavigation: NavigationSection[] = [
   {
     items: [
       { id: 'overview', label: 'Overview', to: '/workspace', icon: Activity, exact: true },
-      { id: 'review', label: 'Review Queue', to: '/workspace/review', icon: FileCheck, count: 8, highlight: true },
-      { id: 'processing', label: 'Processing Queue', to: '/workspace/processing', icon: Layers },
-      { id: 'knowledge-list', label: 'Knowledge', to: '/workspace/knowledge', icon: Compass },
+      { id: 'review', label: 'Review Queue', to: '/workspace/review', icon: FileCheck, highlight: true },
       { id: 'evidence', label: 'Evidence Trace', to: '/workspace/evidence', icon: Shield, highlight: true },
       { id: 'knowledge-graph', label: 'Knowledge Graph', to: '/workspace/knowledge', icon: Compass },
       { id: 'expeditions', label: 'Expeditions', to: '/workspace/expeditions', icon: Compass },
@@ -80,7 +80,9 @@ export const adminNavigation: NavigationSection[] = [
       { id: 'users', label: 'Users', to: '/workspace/admin/users', icon: Users, description: 'Researcher access & roles' },
       { id: 'taxonomy', label: 'Taxonomy', to: '/workspace/admin/taxonomy', icon: GitBranch, description: 'Polar domains & ontology' },
       { id: 'publishing', label: 'Publishing', to: '/workspace/admin/publishing', icon: Send, badge: 'Gate' },
-      { id: 'activity', label: 'System Activity', to: '/workspace/admin/activity', icon: Cpu, description: 'Parsing & audit logs' }
+      { id: 'activity', label: 'Activity', to: '/workspace/admin/activity', icon: Cpu, description: 'Parsing & audit logs' },
+      { id: 'analytics', label: 'Analytics', to: '/workspace/admin/analytics', icon: BarChart3, description: 'Repository metrics & telemetry' },
+      { id: 'settings', label: 'Settings', to: '/workspace/settings', icon: Settings, description: 'System configuration' }
     ]
   }
 ];

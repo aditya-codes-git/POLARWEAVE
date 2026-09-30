@@ -45,7 +45,7 @@ export function ExplorePage() {
       getDatasets().catch(() => [])
     ]).then(([obsList, expList, mediaList, datasetList]) => {
       if (!isMounted) return;
-      setObservations(obsList.filter((o) => o.verification_status === 'VERIFIED' || o.demo));
+      setObservations(obsList.filter((o) => o.verification_status === 'VERIFIED'));
       setExpeditions(expList);
       setMedia(mediaList);
       setDatasets(datasetList);

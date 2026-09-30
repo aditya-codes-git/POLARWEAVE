@@ -15,7 +15,7 @@ import { Dataset } from '@polarweave/types';
 
 export function DatasetExplorerPage() {
   const [datasets, setDatasets] = useState<Dataset[]>([]);
-  const [selectedDatasetId, setSelectedDatasetId] = useState<string>('dts_ice_measurements');
+  const [selectedDatasetId, setSelectedDatasetId] = useState<string>('');
 
   useEffect(() => {
     getDatasets().then((list) => {
@@ -63,7 +63,17 @@ export function DatasetExplorerPage() {
         </div>
       </div>
 
-      {selectedDataset && (
+      {datasets.length === 0 ? (
+        <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center space-y-3 shadow-subtle">
+          <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto border border-emerald-200">
+            <Database className="w-6 h-6" />
+          </div>
+          <h2 className="text-base font-bold text-slate-900">No Datasets Ingested</h2>
+          <p className="text-xs text-slate-500 max-w-md mx-auto">
+            No tabular or sensor CSV datasets are currently loaded. Upload a CSV or sensor stream through the Ingest page to explore calibrated records.
+          </p>
+        </div>
+      ) : selectedDataset && (
         <div className="space-y-6">
           {/* Metadata Card */}
           <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-subtle space-y-4">

@@ -28,7 +28,7 @@ import { DomainBadge } from '../../components/ui/badges';
 
 export function OutreachStudioPage() {
   const [observations, setObservations] = useState<Observation[]>([]);
-  const [selectedObsId, setSelectedObsId] = useState<string>('obs_ice_thickness');
+  const [selectedObsId, setSelectedObsId] = useState<string>('');
   const [contentType, setContentType] = useState<OutreachType>('student_explainer');
   const [audience, setAudience] = useState<OutreachAudience>('student');
   const [tone, setTone] = useState<OutreachTone>('accessible');
@@ -43,13 +43,17 @@ export function OutreachStudioPage() {
     getObservations().then((list) => {
       // Filter for verified observations only (Section 24)
       const verified = list.filter((o) => o.verification_status === 'VERIFIED');
-      setObservations(verified.length > 0 ? verified : list);
+      const usable = verified.length > 0 ? verified : list;
+      setObservations(usable);
+      if (usable.length > 0) {
+        setSelectedObsId(usable[0].id);
+      }
     });
 
     getOutreachList().then((list) => {
       if (list.length > 0) {
         setActiveContent(list[0]);
-        if (list[0].citations.length > 0) {
+        if (list[0].citations?.length > 0) {
           setSelectedCitation(list[0].citations[0]);
         }
       }

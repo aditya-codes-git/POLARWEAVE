@@ -24,11 +24,14 @@ const customStationIcon = new L.DivIcon({
 
 export function ExpeditionsManagerPage() {
   const [expeditions, setExpeditions] = useState<Expedition[]>([]);
-  const [selectedExpId, setSelectedExpId] = useState<string>('exp_45_ant');
+  const [selectedExpId, setSelectedExpId] = useState<string>('');
 
   useEffect(() => {
     getExpeditions().then((res) => {
       setExpeditions(res);
+      if (res.length > 0) {
+        setSelectedExpId(res[0].id);
+      }
     });
   }, []);
 

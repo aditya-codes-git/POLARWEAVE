@@ -22,44 +22,7 @@ interface AuditEvent {
   details: string;
 }
 
-const AUDIT_LOGS: AuditEvent[] = [
-  {
-    id: 'log_01',
-    timestamp: '2026-03-30 02:45:12',
-    actor: 'Dr. Rajesh Sharma',
-    action: 'Approved Observation Sign-off',
-    target: 'obs_ice_thickness (Larsemann fast-ice 1.8m)',
-    type: 'VERIFICATION',
-    details: 'Validated mechanical core #42 with thermistor reading.'
-  },
-  {
-    id: 'log_02',
-    timestamp: '2026-03-30 02:15:30',
-    actor: 'POLARWEAVE Ingest Engine',
-    action: 'Multimodal Structuring Completed',
-    target: 'report_expedition_45_final.pdf (84 pages)',
-    type: 'INGEST',
-    details: 'Extracted 14 locations, 2 datasets, and 6 core observations.'
-  },
-  {
-    id: 'log_03',
-    timestamp: '2026-03-30 01:50:04',
-    actor: 'Dr. Sunita Bose',
-    action: 'Published Dissemination Article',
-    target: 'out_student_ice ("Fast-Ice at Bharati")',
-    type: 'PUBLISH',
-    details: 'Released to Public Portal with 4 verified citation anchors.'
-  },
-  {
-    id: 'log_04',
-    timestamp: '2026-03-29 23:10:45',
-    actor: 'FFmpeg Audio Transcriber',
-    action: 'Audio Codec Sampling Warning',
-    target: 'scientist_interview_raw.mov',
-    type: 'ERROR',
-    details: 'Non-standard audio bitrate 24000Hz. Successfully converted to standard AAC 48kHz.'
-  }
-];
+const AUDIT_LOGS: AuditEvent[] = [];
 
 export function AdminActivityPage() {
   const [retrying, setRetrying] = useState(false);
@@ -137,8 +100,13 @@ export function AdminActivityPage() {
         </h3>
 
         <div className="divide-y divide-slate-100 font-mono text-xs">
-          {AUDIT_LOGS.map((log) => (
-            <div key={log.id} className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          {AUDIT_LOGS.length === 0 ? (
+            <div className="py-8 text-center text-slate-400">
+              No audit records logged yet. Actions performed by researchers and administrators will be recorded here.
+            </div>
+          ) : (
+            AUDIT_LOGS.map((log) => (
+              <div key={log.id} className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
                   <span
@@ -166,7 +134,8 @@ export function AdminActivityPage() {
                 {log.timestamp}
               </div>
             </div>
-          ))}
+            ))
+          )}
         </div>
       </div>
     </div>

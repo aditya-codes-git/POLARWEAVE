@@ -19,7 +19,7 @@ export function MediaLibraryPage() {
   const [media, setMedia] = useState<MediaAsset[]>([]);
   const [activeTab, setActiveTab] = useState<'all' | 'video' | 'image'>('all');
   const [selectedVideo, setSelectedVideo] = useState<MediaAsset | null>(null);
-  const [activeSeekTime, setActiveSeekTime] = useState<number>(758); // default to 12:38 (Core 42 segment)
+  const [activeSeekTime, setActiveSeekTime] = useState<number>(0);
 
   useEffect(() => {
     getMedia().then((res) => {
@@ -186,8 +186,20 @@ export function MediaLibraryPage() {
         </div>
       )}
 
+      {media.length === 0 ? (
+        <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center space-y-3 shadow-subtle">
+          <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto border border-blue-200">
+            <Film className="w-6 h-6" />
+          </div>
+          <h2 className="text-base font-bold text-slate-900">No Media Assets Loaded</h2>
+          <p className="text-xs text-slate-500 max-w-md mx-auto">
+            No field photography or synchronized video recordings are currently present in the repository. Ingest images or video files to explore multimodal evidence.
+          </p>
+        </div>
+      ) : null}
+
       {/* Photography Cards Grid (Section 28 & 14) */}
-      {(activeTab === 'all' || activeTab === 'image') && (
+      {media.length > 0 && (activeTab === 'all' || activeTab === 'image') && (
         <div className="space-y-4">
           <h2 className="text-sm font-semibold text-slate-900">
             Authenticated Photography & EXIF Verification
@@ -227,17 +239,17 @@ export function MediaLibraryPage() {
                     <div className="flex justify-between text-slate-600">
                       <span>GPS Lat/Lon:</span>
                       <span className="font-semibold text-slate-900">
-                        {img.metadata_json?.gps?.latitude || '-69.4089'}°, {img.metadata_json?.gps?.longitude || '76.1872'}°
+                        {img.metadata_json?.gps?.latitude || 'N/A'}°, {img.metadata_json?.gps?.longitude || 'N/A'}°
                       </span>
                     </div>
                     <div className="flex justify-between text-slate-600">
                       <span>Camera:</span>
-                      <span className="text-slate-900">{img.metadata_json?.camera_model || 'Nikon Z8'}</span>
+                      <span className="text-slate-900">{img.metadata_json?.camera_model || 'Standard Sensor'}</span>
                     </div>
                   </div>
 
                   <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px]">
-                    <span className="text-slate-400">Captured: 14 Jan 2026</span>
+                    <span className="text-slate-400">Captured: {new Date(img.capture_date || img.created_at).toLocaleDateString()}</span>
                     <a
                       href="/workspace/evidence"
                       className="text-polar-600 hover:text-polar-700 font-medium flex items-center gap-1"

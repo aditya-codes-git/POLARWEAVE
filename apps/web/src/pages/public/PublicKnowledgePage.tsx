@@ -64,7 +64,7 @@ export function PublicKnowledgePage() {
     ])
       .then(([obsList, expList]) => {
         // Public sees only verified records
-        setObservations(obsList.filter((o) => o.verification_status === 'VERIFIED' || o.demo));
+        setObservations(obsList.filter((o) => o.verification_status === 'VERIFIED'));
         setExpeditions(expList);
         setLoading(false);
       })

@@ -42,128 +42,7 @@ export interface ExplainerArticle {
   };
 }
 
-const EXPLAINERS: ExplainerArticle[] = [
-  {
-    id: 'what-is-fast-ice',
-    title: 'What is Fast Ice, and Why Does Bharati Station Rely on It?',
-    reading_time_min: 4,
-    difficulty: 'Beginner',
-    domain: 'Glaciology',
-    summary: 'Fast ice is sea ice that is "fastened" to the Antarctic coastline or ice shelves. Discover how Indian glaciologists measure its thickness to safely move heavy equipment and traverse the Larsemann Hills.',
-    banner_color: 'from-blue-600 to-cyan-500',
-    expedition: '45th Indian Scientific Expedition to Antarctica',
-    key_concepts: ['Fast-Ice vs Pack-Ice', 'Radar Sounding', 'Mechanical Core Extraction', 'Prydz Bay Swell Stability'],
-    full_content: {
-      lead: 'In polar oceanography and glaciology, "fast ice" does not mean ice that moves quickly—it means sea ice that is held fast (anchored) to the coastline, ice walls, or grounded icebergs.',
-      sections: [
-        {
-          heading: '1. The Crucial Role of Coastal Fast Ice',
-          body: 'For Bharati Station in the Larsemann Hills, fast ice serves as both a natural highway and a buffer. During early summer, research vehicles must traverse the fast ice margin to transfer fuel, scientific core barrels, and supplies from expedition vessels to the station. If the ice sheet is thinner than 1.5 meters or contains internal brine cavities, vehicular travel becomes hazardous.'
-        },
-        {
-          heading: '2. In-Situ Verification: The 1.8-Meter Finding',
-          body: 'During the 45th Indian Antarctic Expedition, glaciologists deployed dual-frequency ground penetrating radar alongside mechanical core drilling. Every physical core extracted confirmed an uncompressed ice thickness of 1.80 m (±0.02 m), establishing robust mechanical integrity.',
-          evidence_tag: '[1] Expedition 45 Scientific Report p.17 & CSV Row 42'
-        },
-        {
-          heading: '3. Seasonal Ocean Swell Protection',
-          body: 'The continuous 1.8-meter ice sheet dampens destructive wave energy propagating from Prydz Bay, shielding coastal penguin colonies and station offing moorings until late-season break-up.'
-        }
-      ],
-      grounded_citations: [
-        { citation: '[1]', source: 'report_expedition_45_final.pdf', reference: 'Section 3.2.1, Page 17' },
-        { citation: '[2]', source: 'ice_measurements_larsemann.csv', reference: 'Core ID IC-45-42, Depth 21.0m' },
-        { citation: '[3]', source: 'scientist_interview.mp4', reference: 'Glaciology Field Briefing at 12:43' }
-      ]
-    }
-  },
-  {
-    id: 'how-ice-cores-preserve-climate',
-    title: 'How Do Antarctic Ice Cores Preserve 800,000 Years of Climate History?',
-    reading_time_min: 6,
-    difficulty: 'Intermediate',
-    domain: 'Paleoclimatology',
-    summary: 'Deep beneath the ice sheet, ancient air bubbles become trapped in frozen layers. Learn how ice drilling reveals past atmospheric carbon dioxide, volcanic eruptions, and prehistoric temperatures.',
-    banner_color: 'from-indigo-600 to-polar-600',
-    expedition: 'Indian Antarctic Climate Archives Program',
-    key_concepts: ['Atmospheric Bubbles', 'Stable Isotopes (δ18O, δD)', 'Firn Compaction', 'Volcanic Ash Tephra'],
-    full_content: {
-      lead: 'Antarctica acts as Earth’s premier climate archive. As snow accumulates year after year without melting, it compresses under its own weight into solid glacial ice, trapping ambient atmospheric gases.',
-      sections: [
-        {
-          heading: '1. From Snowflakes to Ancient Air Capsules',
-          body: 'Near the surface, porous snow ("firn") allows air to circulate. At approximately 70–100 meters depth, the weight of overlying layers seals the pores, transforming loose firn into impermeable ice and trapping miniature bubbles of the ancient atmosphere.'
-        },
-        {
-          heading: '2. Reading Temperature from Oxygen Isotopes',
-          body: 'By measuring the ratio of heavy oxygen-18 to light oxygen-16 in the frozen water molecules, NCPOR researchers reconstruct surface temperatures at the exact time the snow originally fell over hundreds of millennia.'
-        },
-        {
-          heading: '3. Connecting Past Trends to Current Observations',
-          body: 'Data from modern stations like Maitri and Bharati provides the calibration anchor for these ancient climate records, proving that modern CO2 increases outpace any natural cycle seen in the last 800,000 years.'
-        }
-      ],
-      grounded_citations: [
-        { citation: '[1]', source: 'polar_climate_archives_tech_brief.pdf', reference: 'NCPOR Central Ice Core Facility, Page 5' },
-        { citation: '[2]', source: 'maitri_atmospheric_timeseries.csv', reference: 'CO2 and CH4 Isotopic Database' }
-      ]
-    }
-  },
-  {
-    id: 'why-are-polar-oceans-important',
-    title: 'Why Are Polar Oceans the Engine of Earth’s Climate System?',
-    reading_time_min: 5,
-    difficulty: 'Intermediate',
-    domain: 'Oceanography',
-    summary: 'The cold, dense waters of the Southern Ocean drive global thermohaline circulation. Discover how Indian research cruises track deep-water formation and heat absorption.',
-    banner_color: 'from-emerald-600 to-teal-500',
-    expedition: 'Southern Ocean Marine Biogeochemistry & Carbon Sink Cruise',
-    key_concepts: ['Antarctic Bottom Water (AABW)', 'Thermohaline Conveyor', 'Carbon Sequestration', 'Prydz Bay Polynyas'],
-    full_content: {
-      lead: 'The Southern Ocean surrounds Antarctica without continental barriers, making it the most energetic ocean on Earth and the primary regulator of planetary heat and carbon dioxide.',
-      sections: [
-        {
-          heading: '1. The Creation of Antarctic Bottom Water (AABW)',
-          body: 'As sea ice freezes along coastal Antarctica, salt is expelled into the surrounding water—a process called brine rejection. This extra-salty, near-freezing water becomes extremely dense and plunges down the continental shelf into the deep abyssal ocean, driving the global conveyor belt.'
-        },
-        {
-          heading: '2. Subsurface Warm Water Intrusions',
-          body: 'Recent CTD casts conducted during Indian expeditions in Prydz Bay have identified pulses of Modified Circumpolar Deep Water (+0.42°C) encroaching upon the continental shelf, highlighting the vulnerability of ice shelf grounding zones.'
-        }
-      ],
-      grounded_citations: [
-        { citation: '[1]', source: 'prydz_bay_hydrography_ctd.csv', reference: 'Cast CTD-01 at 150m depth' }
-      ]
-    }
-  },
-  {
-    id: 'sea-ice-vs-glacier-ice',
-    title: 'Sea Ice vs. Glacier Ice: Key Differences and Seasonal Cycles',
-    reading_time_min: 3,
-    difficulty: 'Beginner',
-    domain: 'Cryosphere Dynamics',
-    summary: 'Many people confuse sea ice with glaciers. One forms from freezing salty seawater; the other accumulates from falling freshwater snow. Here is why this distinction matters for sea-level rise.',
-    banner_color: 'from-amber-600 to-orange-500',
-    expedition: 'Indian Arctic & Antarctic Educational Directorate',
-    key_concepts: ['Salinity Differences', 'Sea Level Contribution', 'Seasonal Extent', 'Albedo Feedback'],
-    full_content: {
-      lead: 'While both cover immense polar expanses in white sheets, sea ice and glacier ice have fundamentally different origins, physical properties, and impacts on our global climate.',
-      sections: [
-        {
-          heading: '1. Origin & Water Composition',
-          body: 'Glacier ice originates entirely on land from compacted freshwater snowfall over centuries. Sea ice forms and melts directly on the ocean surface when seawater drops below its freezing point (-1.8°C).'
-        },
-        {
-          heading: '2. The Sea Level Question',
-          body: 'Because sea ice is already floating in the ocean, its melting does not directly raise global sea levels (just like an ice cube melting in a glass of water). Conversely, melting land-based glaciers and ice sheets directly transfer stored freshwater into the sea, driving sea level rise.'
-        }
-      ],
-      grounded_citations: [
-        { citation: '[1]', source: 'ncpor_polar_science_glossary.pdf', reference: 'Cryospheric Definitions Series, Vol. 2' }
-      ]
-    }
-  }
-];
+const EXPLAINERS: ExplainerArticle[] = [];
 
 export function PublicExplainersPage() {
   const navigate = useNavigate();
@@ -218,8 +97,19 @@ export function PublicExplainersPage() {
       </div>
 
       {/* 2. EXPLAINER CARDS GRID */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {filteredExplainers.map((article) => (
+      {filteredExplainers.length === 0 ? (
+        <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center space-y-3 shadow-subtle">
+          <div className="w-12 h-12 rounded-2xl bg-polar-50 text-polar-600 flex items-center justify-center mx-auto border border-polar-200">
+            <BookOpen className="w-6 h-6" />
+          </div>
+          <h2 className="text-base font-bold text-slate-900">No Science Explainers Published</h2>
+          <p className="text-xs text-slate-500 max-w-md mx-auto">
+            Science explainers crafted from verified polar research findings will appear here once approved by Knowledge Administrators.
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {filteredExplainers.map((article) => (
           <div
             key={article.id}
             className="bg-white rounded-2xl border border-slate-200 hover:border-slate-300 shadow-subtle hover:shadow-premium transition-all overflow-hidden flex flex-col justify-between group"
@@ -289,6 +179,7 @@ export function PublicExplainersPage() {
           </div>
         ))}
       </div>
+    )}
 
       {/* 3. STORY READER MODAL / SLIDE-OVER */}
       {selectedExplainer && (

@@ -69,7 +69,7 @@ export function KnowledgeGraphPage() {
 
       setNodes(styledNodes);
       setEdges(data.edges);
-      setSelectedNode(styledNodes.find((n) => n.id === 'obs_ice_thickness') || styledNodes[0]);
+      setSelectedNode(styledNodes.length > 0 ? styledNodes[0] : null);
       setLoading(false);
     });
   }, []);

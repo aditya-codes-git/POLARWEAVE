@@ -94,8 +94,17 @@ export function EvidenceTracePage() {
         </div>
       </div>
 
-      {/* Main Trace Showcase */}
-      {selectedObs && trace && (
+      {observations.length === 0 ? (
+        <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center space-y-3 shadow-subtle">
+          <div className="w-12 h-12 rounded-2xl bg-polar-50 text-polar-600 flex items-center justify-center mx-auto border border-polar-200">
+            <ShieldCheck className="w-6 h-6" />
+          </div>
+          <h2 className="text-base font-bold text-slate-900">No Evidence Traces Available</h2>
+          <p className="text-xs text-slate-500 max-w-md mx-auto">
+            No scientific findings or evidence chains are currently present in the repository. Ingest research files to automatically extract and trace evidence.
+          </p>
+        </div>
+      ) : selectedObs && trace && (
         <div className="space-y-6">
           {/* CLAIM CARD */}
           <div className="bg-white border-2 border-polar-200/80 rounded-2xl p-6 shadow-premium relative overflow-hidden">
@@ -110,7 +119,7 @@ export function EvidenceTracePage() {
                 </span>
                 <span className="text-xs text-slate-400">•</span>
                 <span className="text-xs text-slate-500 font-mono">
-                  {selectedObs.source_file_name || (selectedObs.demo ? 'Expedition 45' : 'Uploaded Package')}
+                  {selectedObs.source_file_name || 'Uploaded Package'}
                 </span>
               </div>
 
