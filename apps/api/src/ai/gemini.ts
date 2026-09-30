@@ -292,26 +292,19 @@ function generateDeterministicStructuring(
   // 4. Extract Observations strictly if present in content
   const observations: ScientificStructuringOutput['observations'] = [];
 
-  // Look for explicit observation line (e.g., "Unique observation: Temperature marker 47.31")
-  const obsLine = lines.find((l) => /observation\s*:/i.test(l));
-  const tempMarkerMatch = content.match(/temperature\s+marker\s+([\d.]+)/i);
-  const numericMatch = content.match(/([a-zA-Z\s_-]+)\s*[:=]\s*([\d.]+)\s*([a-zA-Z°%]+)?/);
+  // Look for structured observation indicators in document content
+  const obsLine = lines.find((l) => /^(observation|finding|result|conclusion)\s*:/i.test(l));
+  const numericMatch = content.match(/([a-zA-Z\s_-]{3,30})\s*[:=]\s*([\d.]+)\s*([a-zA-Z°%]+)?/);
 
-  if (obsLine || tempMarkerMatch || subjectLine) {
+  if (obsLine || subjectLine) {
     const obsTitle = obsLine
-      ? obsLine.replace(/^.*observation\s*:\s*/i, '').trim()
+      ? obsLine.replace(/^(observation|finding|result|conclusion)\s*:\s*/i, '').trim()
       : subjectLine
       ? subjectLine.replace(/^subject\s*:\s*/i, '').trim()
       : lines[0] || 'Scientific Observation';
 
     const measurements: Array<{ variable: string; value: number; unit: string }> = [];
-    if (tempMarkerMatch) {
-      measurements.push({
-        variable: 'temperature_marker',
-        value: parseFloat(tempMarkerMatch[1]),
-        unit: '°C'
-      });
-    } else if (numericMatch && numericMatch[1] && numericMatch[2]) {
+    if (numericMatch && numericMatch[1] && numericMatch[2]) {
       measurements.push({
         variable: numericMatch[1].trim().toLowerCase().replace(/\s+/g, '_'),
         value: parseFloat(numericMatch[2]),
@@ -321,16 +314,16 @@ function generateDeterministicStructuring(
 
     const domain: any = isAntarctic || isArctic
       ? 'Glaciology'
-      : lower.includes('sensor') || lower.includes('calibration')
-      ? 'General Science'
       : lower.includes('ocean') || lower.includes('marine')
       ? 'Oceanography'
-      : lower.includes('retin') || lower.includes('bio')
+      : lower.includes('atmosphere') || lower.includes('aerosol') || lower.includes('weather')
+      ? 'Atmospheric Sciences'
+      : lower.includes('bio') || lower.includes('species') || lower.includes('flora') || lower.includes('fauna')
       ? 'Biology & Ecology'
       : 'General Science';
 
     const firstPage = pageContext?.[0]?.pageNumber || 1;
-    const excerpt = obsLine || tempMarkerMatch?.[0] || lines.slice(0, 3).join('; ');
+    const excerpt = obsLine || lines.slice(0, 3).join('; ');
 
     observations.push({
       title: obsTitle,
@@ -341,7 +334,7 @@ function generateDeterministicStructuring(
       observed_at: new Date().toISOString(),
       location: locations[0]?.value || 'Unspecified Location',
       measurements,
-      confidence: 0.95,
+      confidence: 0.90,
       source_reference: `${filename} — Page ${firstPage}`,
       page_number: firstPage,
       excerpt

@@ -28,20 +28,23 @@ export function ReviewQueuePage() {
   const [observations, setObservations] = useState<Observation[]>([]);
   const [jobs, setJobs] = useState<ProcessingJob[]>([]);
   const [loading, setLoading] = useState(true);
-  const [scope, setScope] = useState<'real' | 'demo' | 'all'>(jobId ? 'real' : 'real');
+  const [scope, setScope] = useState<'real' | 'demo' | 'all'>('real');
   const [filter, setFilter] = useState<'all' | 'needs_review' | 'verified'>('all');
 
   useEffect(() => {
     setLoading(true);
+    const activeScope = jobId ? 'real' : scope;
     Promise.all([
       getObservations({
         job_id: jobId || undefined,
-        scope: jobId ? 'real' : scope
+        scope: activeScope
       }),
       getProcessingJobs()
     ])
       .then(([obsData, jobsData]) => {
-        setObservations(obsData);
+        // Enforce strict client-side guarantee: if jobId is set, discard any record not belonging to jobId
+        const scopedData = jobId ? (obsData || []).filter((o) => o.processing_job_id === jobId) : (obsData || []);
+        setObservations(scopedData);
         setJobs(jobsData || []);
       })
       .catch((err) => {
@@ -53,6 +56,8 @@ export function ReviewQueuePage() {
   }, [jobId, scope]);
 
   const filtered = observations.filter((o) => {
+    // Hard invariant: if an active jobId exists, NEVER display artifacts from any other job or demo
+    if (jobId && o.processing_job_id !== jobId) return false;
     if (filter === 'needs_review') return o.verification_status === 'NEEDS_REVIEW' || o.verification_status === 'AI_EXTRACTED';
     if (filter === 'verified') return o.verification_status === 'VERIFIED';
     return true;
@@ -96,24 +101,29 @@ export function ReviewQueuePage() {
           <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-slate-200 shadow-subtle">
             <button
               onClick={() => {
-                setSearchParams({});
-                setScope('real');
+                if (!jobId) setScope('real');
               }}
+              title={jobId ? 'Locked to active job scope' : 'Show uploaded real materials'}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                scope === 'real' && !jobId
+                jobId
+                  ? 'bg-polar-600 text-white shadow-sm cursor-default'
+                  : scope === 'real'
                   ? 'bg-polar-600 text-white shadow-sm'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
               }`}
             >
-              Uploaded Material
+              {jobId ? 'Current Job Findings' : 'Uploaded Material'}
             </button>
             <button
               onClick={() => {
-                setSearchParams({});
-                setScope('demo');
+                if (!jobId) setScope('demo');
               }}
+              disabled={Boolean(jobId)}
+              title={jobId ? 'Clear job scope via "Show All Uploads" to access demo archives' : 'Show demo archive'}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                scope === 'demo'
+                jobId
+                  ? 'opacity-40 cursor-not-allowed text-slate-400'
+                  : scope === 'demo'
                   ? 'bg-amber-600 text-white shadow-sm'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
               }`}
@@ -122,11 +132,14 @@ export function ReviewQueuePage() {
             </button>
             <button
               onClick={() => {
-                setSearchParams({});
-                setScope('all');
+                if (!jobId) setScope('all');
               }}
+              disabled={Boolean(jobId)}
+              title={jobId ? 'Clear job scope via "Show All Uploads" to access all archives' : 'Show all findings'}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                scope === 'all'
+                jobId
+                  ? 'opacity-40 cursor-not-allowed text-slate-400'
+                  : scope === 'all'
                   ? 'bg-slate-900 text-white shadow-sm'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
               }`}

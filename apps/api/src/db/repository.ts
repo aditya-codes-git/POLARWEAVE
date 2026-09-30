@@ -135,9 +135,7 @@ export async function getProcessingJobs(): Promise<ProcessingJob[]> {
         .order('started_at', { ascending: false });
 
       if (!error && data) {
-        const dbJobIds = new Set(data.map((j) => j.id));
-        const extraMemJobs = memoryStore.jobs.filter((j) => !dbJobIds.has(j.id));
-        return [...data, ...extraMemJobs];
+        return data;
       }
     } catch (err: any) {
       console.warn('[POLARWEAVE DB] Error fetching processing_jobs:', err?.message);
@@ -227,9 +225,7 @@ export async function getDocuments(): Promise<PolarDocument[]> {
         .order('created_at', { ascending: false });
 
       if (!error && data) {
-        const dbDocIds = new Set(data.map((d) => d.id));
-        const extraMemDocs = memoryStore.documents.filter((d) => !dbDocIds.has(d.id));
-        return [...data, ...extraMemDocs];
+        return data;
       }
     } catch (err: any) {
       console.warn('[POLARWEAVE DB] Error fetching documents:', err?.message);
@@ -295,8 +291,6 @@ export async function getDatasets(): Promise<Dataset[]> {
         .order('created_at', { ascending: false });
 
       if (!error && data) {
-        const dbIds = new Set(data.map((d) => d.id));
-        const extraMem = memoryStore.datasets.filter((d) => !dbIds.has(d.id));
         const mapped = data.map((d) => ({
           id: d.id,
           title: d.title,
@@ -310,7 +304,7 @@ export async function getDatasets(): Promise<Dataset[]> {
           expedition_id: d.expedition_id,
           created_at: d.created_at
         }));
-        return [...mapped, ...extraMem];
+        return mapped;
       }
     } catch (err: any) {
       console.warn('[POLARWEAVE DB] Error fetching datasets:', err?.message);
@@ -404,11 +398,7 @@ export async function getMedia(type?: string): Promise<MediaAsset[]> {
       }
       const { data, error } = await query;
       if (!error && data) {
-        const dbIds = new Set(data.map((m) => m.id));
-        const extraMem = memoryStore.media.filter(
-          (m) => !dbIds.has(m.id) && (!type || m.type === type)
-        );
-        return [...data, ...extraMem];
+        return data;
       }
     } catch (err: any) {
       console.warn('[POLARWEAVE DB] Error fetching media_assets:', err?.message);
@@ -578,22 +568,16 @@ export async function getObservations(filters?: {
 
       const { data, error } = await query;
       if (!error && data) {
-        // If searching specifically for real data or specific job, DO NOT merge demo fixtures
-        if (isRealScope) {
-          const memMatches = memoryStore.observations.filter((o) => {
-            if (o.demo !== false) return false;
-            if (filters?.job_id && o.processing_job_id !== filters.job_id) return false;
-            return true;
-          });
-          const dbIds = new Set(data.map((d) => d.id));
-          return [...data, ...memMatches.filter((m) => !dbIds.has(m.id))];
+        // If not explicitly requesting demo data, strictly return actual database records
+        if (filters?.scope !== 'demo') {
+          return data;
         }
 
-        // Otherwise merge with extra memoryStore items if not already in DB
+        // Only for explicit demo scope, merge memory demo items if any exist
         const dbObsIds = new Set(data.map((o) => o.id));
         const extraMemObs = memoryStore.observations.filter((o) => {
           if (dbObsIds.has(o.id)) return false;
-          if (filters?.scope === 'demo' && o.demo === false) return false;
+          if (o.demo !== true) return false;
           if (filters?.domain && filters.domain !== 'ALL' && o.research_domain.toLowerCase() !== filters.domain.toLowerCase()) return false;
           if (filters?.status && filters.status !== 'ALL' && o.verification_status !== filters.status) return false;
           if (filters?.expedition_id && o.expedition_id !== filters.expedition_id) return false;
