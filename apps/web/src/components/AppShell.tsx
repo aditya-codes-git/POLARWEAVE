@@ -382,13 +382,10 @@ export function AppShell() {
                     </p>
                   </div>
 
-                  {/* Role Switcher for SIH Demo (Section 6 & 23) */}
+                  {/* Role Switcher */}
                   <div className="py-1">
                     <div className="px-3 py-1 text-[10px] font-mono uppercase text-slate-400 flex items-center justify-between">
-                      <span>SIH DEMO ROLE</span>
-                      <span className="text-[9px] bg-amber-50 text-amber-700 px-1 py-0.2 rounded border border-amber-200 font-bold">
-                        DEMO
-                      </span>
+                      <span>WORKSPACE ROLE</span>
                     </div>
 
                     {/* Role 1: Researcher */}
@@ -400,7 +397,9 @@ export function AppShell() {
                         }`}
                     >
                       <div>
-                        <div className="text-xs text-slate-900">Dr. Rajesh Sharma (Researcher)</div>
+                        <div className="text-xs text-slate-900">
+                          {role === 'researcher' && user?.name ? `${user.name} (Researcher)` : 'Researcher'}
+                        </div>
                         <div className="text-[10px] text-slate-400 font-normal">
                           Scientific Contributor • CREATE
                         </div>
@@ -419,7 +418,9 @@ export function AppShell() {
                         }`}
                     >
                       <div>
-                        <div className="text-xs text-slate-900">Dr. Sunita Bose (Knowledge Admin)</div>
+                        <div className="text-xs text-slate-900">
+                          {role === 'admin' && user?.name ? `${user.name} (Knowledge Admin)` : 'Knowledge Admin'}
+                        </div>
                         <div className="text-[10px] text-slate-400 font-normal">
                           NCPOR Knowledge Management • GOVERN
                         </div>
@@ -438,7 +439,9 @@ export function AppShell() {
                         }`}
                     >
                       <div>
-                        <div className="text-xs text-slate-900">Public Explorer (Educator)</div>
+                        <div className="text-xs text-slate-900">
+                          {role === 'public' && user?.name ? `${user.name} (Public Viewer)` : 'Public Explorer'}
+                        </div>
                         <div className="text-[10px] text-slate-400 font-normal">
                           Student / Discovery • EXPLORE
                         </div>
