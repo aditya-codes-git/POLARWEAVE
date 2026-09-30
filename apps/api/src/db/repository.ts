@@ -1504,3 +1504,184 @@ export async function upsertUserProfile(profileData: Partial<UserProfile> & { us
   return merged;
 }
 
+// -------------------------------------------------------------
+// DELETE PROCESSING JOB & ALL RELATED PACKAGE ENTITIES CASCADE
+// -------------------------------------------------------------
+export async function deleteProcessingJobCascade(jobId: string): Promise<{
+  deleted_job_id: string;
+  counts: {
+    observations: number;
+    documents: number;
+    datasets: number;
+    media: number;
+    measurements: number;
+    evidence_links: number;
+    relationships: number;
+    outreach: number;
+    verification_records: number;
+    storage_files: number;
+  };
+}> {
+  // 1. Gather all entity IDs associated with this job
+  const docs = await getDocuments({ job_id: jobId });
+  const docIds = docs.map((d) => d.id);
+  const docStoragePaths = docs.map((d) => d.storage_path).filter(Boolean) as string[];
+
+  const datasets = await getDatasets({ job_id: jobId });
+  const datasetIds = datasets.map((d) => d.id);
+  const datasetStoragePaths = datasets.map((d) => d.file_path).filter(Boolean) as string[];
+
+  const mediaList = await getMedia({ job_id: jobId });
+  const mediaIds = mediaList.map((m) => m.id);
+  const mediaStoragePaths = [
+    ...mediaList.map((m) => m.storage_path).filter(Boolean),
+    ...mediaList.map((m) => m.thumbnail_path).filter(Boolean)
+  ] as string[];
+
+  const obsList = await getObservations({ job_id: jobId });
+  const obsIds = obsList.map((o) => o.id);
+
+  const allEntityIds = new Set([...docIds, ...datasetIds, ...mediaIds, ...obsIds]);
+
+  // 2. Identify storage paths to purge
+  const storagePathsToDelete = Array.from(new Set([...docStoragePaths, ...datasetStoragePaths, ...mediaStoragePaths]));
+
+  let measurementCount = 0;
+  let evidenceLinkCount = 0;
+  let relationshipCount = 0;
+  let outreachCount = 0;
+  let verificationCount = 0;
+
+  // 3. PostgreSQL cleanup if Supabase is active
+  if (supabase) {
+    try {
+      // Delete measurements
+      if (obsIds.length > 0) {
+        const { error: msrErr, count: msrC } = await supabase
+          .from('measurements')
+          .delete({ count: 'exact' })
+          .in('observation_id', obsIds);
+        if (!msrErr && typeof msrC === 'number') measurementCount = msrC;
+      }
+
+      // Delete evidence links
+      const { error: evErr1, count: evC1 } = await supabase
+        .from('evidence_links')
+        .delete({ count: 'exact' })
+        .eq('processing_job_id', jobId);
+      if (!evErr1 && typeof evC1 === 'number') evidenceLinkCount += evC1;
+
+      if (obsIds.length > 0) {
+        const { error: evErr2, count: evC2 } = await supabase
+          .from('evidence_links')
+          .delete({ count: 'exact' })
+          .in('knowledge_id', obsIds);
+        if (!evErr2 && typeof evC2 === 'number') evidenceLinkCount += evC2;
+      }
+
+      // Delete verification records
+      if (obsIds.length > 0) {
+        const { error: verErr, count: verC } = await supabase
+          .from('verification_records')
+          .delete({ count: 'exact' })
+          .in('entity_id', obsIds);
+        if (!verErr && typeof verC === 'number') verificationCount = verC;
+      }
+
+      // Delete knowledge relationships
+      if (allEntityIds.size > 0) {
+        const idArr = Array.from(allEntityIds);
+        const { error: relErr1 } = await supabase
+          .from('knowledge_relationships')
+          .delete()
+          .in('source_entity_id', idArr);
+        const { error: relErr2 } = await supabase
+          .from('knowledge_relationships')
+          .delete()
+          .in('target_entity_id', idArr);
+        if (relErr1) console.warn('[POLARWEAVE DB] Error deleting relationships:', relErr1.message);
+        if (relErr2) console.warn('[POLARWEAVE DB] Error deleting relationships:', relErr2.message);
+      }
+
+      // Delete document chunks & documents
+      if (docIds.length > 0) {
+        await supabase.from('document_chunks').delete().in('document_id', docIds);
+        await supabase.from('documents').delete().in('id', docIds);
+      } else {
+        await supabase.from('documents').delete().eq('processing_job_id', jobId);
+      }
+
+      // Delete datasets
+      await supabase.from('datasets').delete().eq('processing_job_id', jobId);
+
+      // Delete media
+      await supabase.from('media_assets').delete().eq('processing_job_id', jobId);
+
+      // Delete observations
+      await supabase.from('observations').delete().eq('processing_job_id', jobId);
+
+      // Delete outreach content citing these observations
+      if (obsIds.length > 0) {
+        const { data: outreachRows } = await supabase.from('generated_content').select('id, source_knowledge_ids');
+        if (outreachRows) {
+          const deleteOutreachIds = outreachRows
+            .filter((row: any) => Array.isArray(row.source_knowledge_ids) && row.source_knowledge_ids.some((kid: string) => obsIds.includes(kid)))
+            .map((row: any) => row.id);
+          if (deleteOutreachIds.length > 0) {
+            await supabase.from('generated_content').delete().in('id', deleteOutreachIds);
+            outreachCount = deleteOutreachIds.length;
+          }
+        }
+      }
+
+      // Delete the processing job container itself
+      await supabase.from('processing_jobs').delete().eq('id', jobId);
+
+      // Delete storage files
+      if (storagePathsToDelete.length > 0) {
+        const { error: storageErr } = await supabase.storage
+          .from(BUCKET_NAME)
+          .remove(storagePathsToDelete);
+        if (storageErr) {
+          console.warn('[POLARWEAVE Storage] Error deleting files:', storageErr.message);
+        }
+      }
+    } catch (err: any) {
+      console.warn(`[POLARWEAVE DB] Exception deleting job package ${jobId}:`, err?.message);
+    }
+  }
+
+  // 4. Memory store cleanup
+  if (obsIds.length > 0) {
+    memoryStore.measurements = memoryStore.measurements.filter((m) => !obsIds.includes(m.observation_id));
+  }
+  memoryStore.evidenceLinks = memoryStore.evidenceLinks.filter((l) => l.processing_job_id !== jobId && !obsIds.includes(l.knowledge_id));
+  memoryStore.relationships = memoryStore.relationships.filter(
+    (r) => !allEntityIds.has(r.source_entity_id) && !allEntityIds.has(r.target_entity_id)
+  );
+  memoryStore.documents = memoryStore.documents.filter((d) => d.processing_job_id !== jobId && !docIds.includes(d.id));
+  memoryStore.datasets = memoryStore.datasets.filter((d) => d.processing_job_id !== jobId && !datasetIds.includes(d.id));
+  memoryStore.media = memoryStore.media.filter((m) => m.processing_job_id !== jobId && !mediaIds.includes(m.id));
+  memoryStore.observations = memoryStore.observations.filter((o) => o.processing_job_id !== jobId && !obsIds.includes(o.id));
+  memoryStore.outreach = memoryStore.outreach.filter(
+    (c) => !(Array.isArray(c.source_knowledge_ids) && c.source_knowledge_ids.some((kid: string) => obsIds.includes(kid)))
+  );
+  memoryStore.jobs = memoryStore.jobs.filter((j) => j.id !== jobId);
+
+  return {
+    deleted_job_id: jobId,
+    counts: {
+      observations: obsIds.length,
+      documents: docIds.length,
+      datasets: datasetIds.length,
+      media: mediaIds.length,
+      measurements: measurementCount,
+      evidence_links: evidenceLinkCount,
+      relationships: relationshipCount,
+      outreach: outreachCount,
+      verification_records: verificationCount,
+      storage_files: storagePathsToDelete.length
+    }
+  };
+}
+

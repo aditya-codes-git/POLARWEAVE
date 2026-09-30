@@ -12,6 +12,7 @@ import {
   getProcessingJobs as fetchProcessingJobs,
   getProcessingJobById as fetchProcessingJobById,
   getJobPackageData,
+  deleteProcessingJobCascade,
   createDocument,
   createDataset,
   createMediaAsset,
@@ -614,5 +615,39 @@ export async function updateJob(req: Request, res: Response) {
   return res.status(200).json({
     success: true,
     data: updated
+  });
+}
+
+export async function deleteJob(req: Request, res: Response) {
+  const id = String(req.params.id);
+  const caller = req.user;
+
+  // Enforce Admin Only: Researchers and Public Explorer cannot delete proposals/jobs
+  if (!caller || caller.role !== 'admin') {
+    return res.status(403).json({
+      success: false,
+      error: {
+        code: 'FORBIDDEN',
+        message: 'Only Knowledge Admins are authorized to delete research packages.'
+      }
+    });
+  }
+
+  const existingJob = await fetchProcessingJobById(id);
+  if (!existingJob) {
+    return res.status(404).json({
+      success: false,
+      error: { code: 'NOT_FOUND', message: `Job ${id} not found.` }
+    });
+  }
+
+  const result = await deleteProcessingJobCascade(id);
+
+  return res.status(200).json({
+    success: true,
+    data: {
+      message: `Research package ${id} and all associated artifacts have been permanently deleted.`,
+      ...result
+    }
   });
 }

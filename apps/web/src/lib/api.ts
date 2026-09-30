@@ -309,6 +309,23 @@ export async function renameProcessingJob(id: string, title: string): Promise<Pr
   throw new Error(json.error?.message || 'Failed to rename package');
 }
 
+export async function deleteProcessingJob(id: string): Promise<{ success: boolean; data: any }> {
+  const res = await fetch(`${API_BASE}/api/ingest/jobs/${id}`, {
+    method: 'DELETE',
+    headers: {
+      ...getAuthHeader()
+    }
+  });
+
+  if (!res.ok) {
+    const errJson = await res.json().catch(() => ({}));
+    throw new Error(errJson?.error?.message || `Failed to delete research package (status ${res.status})`);
+  }
+
+  const json = await res.json();
+  return json;
+}
+
 
 // ---------------------------------------------
 // KNOWLEDGE GRAPH

@@ -9,13 +9,15 @@ import {
   Edit2,
   Check,
   X,
-  FileText
+  FileText,
+  Trash2
 } from 'lucide-react';
 import {
   getObservations,
   getProcessingJobs,
   getJobPackage,
   renameProcessingJob,
+  deleteProcessingJob,
   ResearchPackagePayload
 } from '../../lib/api';
 import { Observation, ProcessingJob } from '@polarweave/types';
@@ -40,6 +42,11 @@ export function ReviewQueuePage() {
   const [editingJobId, setEditingJobId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState('');
   const [isRenaming, setIsRenaming] = useState(false);
+
+  // Package deletion state (Admin only)
+  const [packageToDelete, setPackageToDelete] = useState<ProcessingJob | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const isAdmin = role === 'admin';
 
@@ -124,6 +131,41 @@ export function ReviewQueuePage() {
   const handleCancelRename = (e: React.MouseEvent) => {
     e.stopPropagation();
     setEditingJobId(null);
+  };
+
+  // Auto-dismiss toast
+  useEffect(() => {
+    if (!toastMessage) return;
+    const timer = setTimeout(() => setToastMessage(null), 4000);
+    return () => clearTimeout(timer);
+  }, [toastMessage]);
+
+  const handleDeletePackageConfirm = async () => {
+    if (!packageToDelete) return;
+    try {
+      setIsDeleting(true);
+      const targetId = packageToDelete.id;
+      const targetTitle = packageToDelete.title || packageToDelete.filename;
+
+      await deleteProcessingJob(targetId);
+
+      // Immediately remove package and its observations from local state
+      setJobs((prev) => prev.filter((j) => j.id !== targetId));
+      setObservations((prev) => prev.filter((o) => o.processing_job_id !== targetId));
+
+      // If this package was currently open in query param, navigate back to list
+      if (jobId === targetId) {
+        setSearchParams({});
+      }
+
+      setToastMessage(`Research package "${targetTitle}" was permanently deleted.`);
+      setPackageToDelete(null);
+    } catch (err: any) {
+      console.error('Failed to delete research package:', err);
+      alert(err.message || 'Failed to delete research package');
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const filtered = observations.filter((o) => {
@@ -372,10 +414,27 @@ export function ReviewQueuePage() {
                         </span>
                       </div>
 
-                      {/* Right Action */}
-                      <div className="flex items-center gap-1 text-slate-400 group-hover:text-slate-800 transition-colors pl-2">
-                        <span className="text-xs font-medium">Open</span>
-                        <ArrowRight className="w-3.5 h-3.5" />
+                      {/* Right Action: Open and Delete (Admin Only) */}
+                      <div className="flex items-center gap-3 pl-2">
+                        <div className="flex items-center gap-1 text-slate-400 group-hover:text-slate-800 transition-colors">
+                          <span className="text-xs font-medium">Open</span>
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        </div>
+
+                        {isAdmin && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPackageToDelete(job);
+                            }}
+                            title="Delete research package"
+                            className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-rose-600 hover:text-rose-700 bg-rose-50/60 hover:bg-rose-100/80 border border-rose-200/80 rounded transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Delete</span>
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -442,6 +501,79 @@ export function ReviewQueuePage() {
                 </div>
               ))
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Success Notification Toast */}
+      {toastMessage && (
+        <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white px-4 py-3 rounded-lg shadow-xl border border-slate-700 flex items-center gap-3 text-xs max-w-md animate-in fade-in slide-in-from-bottom-3 duration-200">
+          <div className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+          <span className="flex-1">{toastMessage}</span>
+          <button
+            onClick={() => setToastMessage(null)}
+            className="text-slate-400 hover:text-white"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* Confirmation Dialog for Package Deletion (Admin Only) */}
+      {packageToDelete && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={() => {
+            if (!isDeleting) setPackageToDelete(null);
+          }}
+        >
+          <div
+            className="bg-white rounded-xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center text-rose-600 shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-semibold text-slate-900">
+                  Delete this research package?
+                </h3>
+                <p className="text-xs text-slate-500 font-mono">
+                  {packageToDelete.title || packageToDelete.filename} ({packageToDelete.id})
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed bg-slate-50 p-3 rounded-lg border border-slate-200">
+              All source files, extracted knowledge, evidence, and generated artifacts associated with this package will be permanently deleted.
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setPackageToDelete(null)}
+                className="px-3.5 py-1.5 rounded-lg border border-slate-300 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={handleDeletePackageConfirm}
+                className="px-4 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold shadow-sm transition-colors disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {isDeleting ? (
+                  <span>Deleting...</span>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Delete Package</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}
