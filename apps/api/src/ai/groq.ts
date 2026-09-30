@@ -18,7 +18,7 @@ export async function callGroqChat(
     throw new Error('GROQ_API_KEY is not configured');
   }
 
-  const model = options?.model || 'llama-3.1-8b-instant';
+  const model = options?.model || 'openai/gpt-oss-120b';
   const temperature = options?.temperature ?? 0.2;
   const jsonMode = options?.jsonMode ?? false;
 

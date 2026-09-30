@@ -107,6 +107,7 @@ export interface Document {
   size_bytes: number;
   document_type: "expedition_report" | "field_notes" | "scientific_paper" | "protocol" | "other";
   processing_status: "queued" | "processing" | "completed" | "failed";
+  processing_job_id?: string;
   page_count?: number;
   metadata_json?: Record<string, unknown>;
   created_by?: string;
@@ -137,6 +138,7 @@ export interface Dataset {
   filename: string;
   file_path: string;
   source_document_id?: string;
+  processing_job_id?: string;
   row_count: number;
   column_count: number;
   columns?: DatasetColumn[];
@@ -150,7 +152,7 @@ export interface Dataset {
 
 export interface Observation {
   id: string;
-  expedition_id: string;
+  expedition_id?: string;
   expedition_title?: string;
   title: string;
   description: string;
@@ -161,7 +163,9 @@ export interface Observation {
     | "Biology & Ecology"
     | "Geology & Geophysics"
     | "Meteorology"
-    | "Cryosphere Dynamics";
+    | "Cryosphere Dynamics"
+    | "General Science"
+    | "Other";
   observed_at?: string;
   location_id?: string;
   location_name?: string;
@@ -170,6 +174,11 @@ export interface Observation {
   verification_status: VerificationStatus;
   created_at: string;
   demo?: boolean;
+  processing_job_id?: string;
+  source_file_id?: string;
+  source_file_name?: string;
+  excerpt?: string;
+  page_number?: number;
 }
 
 export interface Measurement {
@@ -207,6 +216,7 @@ export interface MediaAsset {
   location_id?: string;
   location_name?: string;
   capture_date?: string;
+  processing_job_id?: string;
   metadata_json?: {
     exif?: Record<string, unknown>;
     gps?: { latitude: number; longitude: number; altitude?: number };
@@ -251,6 +261,7 @@ export interface EvidenceLink {
   media_url?: string;
   confidence: number; // 0.0 to 1.0
   verification_status: VerificationStatus;
+  processing_job_id?: string;
   created_at: string;
 }
 
@@ -358,12 +369,12 @@ export interface GeneratedContent {
 export const ExtractedEntitySchema = z.object({
   id: z.string().optional(),
   value: z.string(),
-  source_reference: z.string().optional(),
-  page_number: z.number().optional(),
-  row_number: z.number().optional(),
-  timestamp_seconds: z.number().optional(),
+  source_reference: z.string().nullable().optional(),
+  page_number: z.number().nullable().optional(),
+  row_number: z.number().nullable().optional(),
+  timestamp_seconds: z.number().nullable().optional(),
   confidence: z.number().min(0).max(1),
-  reason: z.string().optional(),
+  reason: z.string().nullable().optional(),
 });
 
 export const ExtractedObservationSchema = z.object({
@@ -377,27 +388,29 @@ export const ExtractedObservationSchema = z.object({
     "Geology & Geophysics",
     "Meteorology",
     "Cryosphere Dynamics",
+    "General Science",
+    "Other",
   ]),
-  observed_at: z.string().optional(),
-  location: z.string().optional(),
+  observed_at: z.string().nullable().optional(),
+  location: z.string().nullable().optional(),
   measurements: z
     .array(
       z.object({
         variable: z.string(),
         value: z.number(),
-        unit: z.string(),
+        unit: z.string().nullable().optional().default(''),
       })
     )
     .default([]),
   confidence: z.number().min(0).max(1),
   source_reference: z.string(),
-  page_number: z.number().optional(),
+  page_number: z.number().nullable().optional(),
   excerpt: z.string(),
 });
 
 export const ScientificStructuringOutputSchema = z.object({
-  title: z.string(),
-  content_type: z.string(),
+  title: z.string().nullable().optional().transform(v => v || "Untitled Document"),
+  content_type: z.string().nullable().optional().transform(v => v || "document"),
   expedition: z.string().nullable().optional(),
   locations: z.array(ExtractedEntitySchema).default([]),
   researchers: z.array(ExtractedEntitySchema).default([]),
@@ -416,7 +429,7 @@ export const ScientificStructuringOutputSchema = z.object({
   publications: z.array(z.string()).default([]),
   media_references: z.array(z.string()).default([]),
   activities: z.array(z.string()).default([]),
-  summary: z.string(),
+  summary: z.string().nullable().optional().transform(v => v || ""),
 });
 
 export type ScientificStructuringOutput = z.infer<

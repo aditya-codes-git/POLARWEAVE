@@ -4,6 +4,7 @@ import {
   FileText,
   Database,
   Film,
+  Image as ImageIcon,
   CheckCircle2,
   XCircle,
   Edit3,
@@ -14,15 +15,15 @@ import {
   Info
 } from 'lucide-react';
 import { getObservationById, submitReview } from '../../lib/api';
-import { Observation } from '@polarweave/types';
+import { Observation, EvidenceLink } from '@polarweave/types';
 import { ConfidenceBadge, VerificationBadge, DomainBadge } from '../../components/ui/badges';
 import { EvidenceDrawer } from '../../components/EvidenceDrawer';
 
 export function ReviewDetailPage() {
-  const { id = 'obs_ice_thickness' } = useParams();
+  const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  const [obs, setObs] = useState<Observation | null>(null);
+  const [obs, setObs] = useState<(Observation & { measurements?: any[]; evidence?: EvidenceLink[] }) | null>(null);
   const [loading, setLoading] = useState(true);
   const [isEvidenceDrawerOpen, setIsEvidenceDrawerOpen] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -32,23 +33,47 @@ export function ReviewDetailPage() {
 
   useEffect(() => {
     async function load() {
-      const data = await getObservationById(id);
-      setObs(data);
-      setEditedTitle(data.title);
-      setEditedDesc(data.description);
-      setLoading(false);
+      if (!id) {
+        navigate('/workspace/review');
+        return;
+      }
+      try {
+        const data = await getObservationById(id);
+        setObs(data);
+        setEditedTitle(data.title);
+        setEditedDesc(data.description);
+      } catch (e) {
+        console.error('Failed to load observation:', e);
+      } finally {
+        setLoading(false);
+      }
     }
     load();
-  }, [id]);
+  }, [id, navigate]);
 
-  if (loading || !obs) {
-    return <div className="p-8 text-center text-xs text-slate-400">Loading observation review...</div>;
+  if (loading) {
+    return <div className="p-12 text-center text-xs text-slate-400">Loading observation review...</div>;
+  }
+
+  if (!obs) {
+    return (
+      <div className="max-w-xl mx-auto py-12 text-center space-y-4">
+        <h2 className="text-lg font-bold text-slate-900">Observation Not Found</h2>
+        <p className="text-xs text-slate-500">The requested observation could not be found or has not been processed.</p>
+        <button
+          onClick={() => navigate('/workspace/review')}
+          className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-semibold"
+        >
+          Return to Review Queue
+        </button>
+      </div>
+    );
   }
 
   const handleApprove = async () => {
     await submitReview('observation', obs.id, { action: 'approve' });
     setObs({ ...obs, verification_status: 'VERIFIED' });
-    setStatusMessage('Observation approved and verified by researcher.');
+    setStatusMessage('Observation approved and verified.');
     setTimeout(() => setStatusMessage(null), 4000);
   };
 
@@ -64,19 +89,21 @@ export function ReviewDetailPage() {
       action: 'edit',
       edited_data: { title: editedTitle, description: editedDesc }
     });
-    setObs({ ...obs, title: editedTitle, description: editedDesc, verification_status: 'VERIFIED' });
+    setObs({ ...obs, title: editedTitle, description: editedDesc });
     setIsEditing(false);
-    setStatusMessage('Observation updated and verified.');
+    setStatusMessage('Metadata updated successfully.');
     setTimeout(() => setStatusMessage(null), 4000);
   };
 
+  const evidenceList = obs.evidence || [];
+
   return (
     <div className="max-w-7xl mx-auto space-y-6">
-      {/* Top Bar with Back Link */}
+      {/* Top Navigation & Status */}
       <div className="flex items-center justify-between">
         <button
           onClick={() => navigate('/workspace/review')}
-          className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-900 font-medium"
+          className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600 hover:text-slate-900 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>Back to Verification Queue</span>
@@ -88,7 +115,7 @@ export function ReviewDetailPage() {
             className="px-3 py-1.5 rounded-lg bg-polar-50 hover:bg-polar-100 text-polar-800 border border-polar-200 text-xs font-semibold shadow-subtle flex items-center gap-1.5"
           >
             <ShieldCheck className="w-3.5 h-3.5 text-polar-600" />
-            <span>Show Full Evidence Trace</span>
+            <span>Show Evidence Provenance ({evidenceList.length})</span>
           </button>
         </div>
       </div>
@@ -100,7 +127,7 @@ export function ReviewDetailPage() {
         </div>
       )}
 
-      {/* 3-COLUMN REVIEW WORKSPACE (Section 17) */}
+      {/* 3-COLUMN REVIEW WORKSPACE */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* COLUMN 1: SOURCE MATERIAL (4 cols) */}
         <div className="lg:col-span-4 bg-white border border-slate-200 rounded-2xl p-5 shadow-subtle space-y-4">
@@ -110,63 +137,82 @@ export function ReviewDetailPage() {
                 1. Source Material
               </h2>
               <p className="text-xs text-slate-800 font-medium">
-                Physical reports & datasets
+                Uploaded source evidence
               </p>
             </div>
-            <span className="text-[10px] font-mono text-slate-400">PDF / CSV / MP4</span>
+            <span className="text-[10px] font-mono text-slate-400">PROVENANCE</span>
           </div>
 
-          {/* PDF Source Snippet */}
-          <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-900 flex items-center gap-1.5">
-                <FileText className="w-4 h-4 text-rose-600" />
-                report_expedition_45_final.pdf
-              </span>
-              <span className="text-[10px] font-mono bg-white px-1.5 py-0.5 rounded border border-slate-200 text-slate-600">
-                Page 17
-              </span>
-            </div>
-            <div className="text-xs font-mono text-slate-700 bg-white p-2.5 rounded-lg border border-slate-200/60 leading-relaxed">
-              "Section 3.2.1 Coastal Fast-Ice Monitoring: In-situ mechanical core extraction at station perimeter point IC-45-42 yielded an uncompressed sea-ice thickness of 1.80 m (±0.02 m)."
-            </div>
-          </div>
+          {/* Render authentic evidence links if present */}
+          {evidenceList.length > 0 ? (
+            evidenceList.map((evi) => (
+              <div key={evi.id} className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-900 flex items-center gap-1.5">
+                    {evi.source_type === 'pdf' || evi.source_type === 'docx' ? (
+                      <FileText className="w-4 h-4 text-rose-600 shrink-0" />
+                    ) : evi.source_type === 'dataset' ? (
+                      <Database className="w-4 h-4 text-emerald-600 shrink-0" />
+                    ) : evi.source_type === 'video' ? (
+                      <Film className="w-4 h-4 text-blue-600 shrink-0" />
+                    ) : (
+                      <ImageIcon className="w-4 h-4 text-purple-600 shrink-0" />
+                    )}
+                    <span className="truncate max-w-[200px]" title={evi.source_title}>
+                      {evi.source_title}
+                    </span>
+                  </span>
+                  {evi.page_number && (
+                    <span className="text-[10px] font-mono bg-white px-1.5 py-0.5 rounded border border-slate-200 text-slate-600 shrink-0">
+                      Page {evi.page_number}
+                    </span>
+                  )}
+                  {evi.row_number && (
+                    <span className="text-[10px] font-mono bg-white px-1.5 py-0.5 rounded border border-slate-200 text-slate-600 shrink-0">
+                      Row {evi.row_number}
+                    </span>
+                  )}
+                </div>
 
-          {/* Dataset Source Snippet */}
-          <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-900 flex items-center gap-1.5">
-                <Database className="w-4 h-4 text-emerald-600" />
-                ice_measurements_larsemann.csv
-              </span>
-              <span className="text-[10px] font-mono bg-white px-1.5 py-0.5 rounded border border-slate-200 text-slate-600">
-                Row 42
-              </span>
-            </div>
-            <div className="text-xs font-mono text-slate-700 bg-white p-2.5 rounded-lg border border-slate-200/60 leading-relaxed">
-              core_id: IC-45-42<br />
-              depth_m: 21.0<br />
-              ice_thickness_m: 1.80<br />
-              density_kg_m3: 918<br />
-              temp_c: -14.8
-            </div>
-          </div>
+                <div className="text-xs font-mono text-slate-700 bg-white p-2.5 rounded-lg border border-slate-200/60 leading-relaxed break-words">
+                  "{evi.excerpt}"
+                </div>
 
-          {/* Video Interview Snippet */}
-          <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-900 flex items-center gap-1.5">
-                <Film className="w-4 h-4 text-blue-600" />
-                scientist_interview.mp4
-              </span>
-              <span className="text-[10px] font-mono bg-white px-1.5 py-0.5 rounded border border-slate-200 text-slate-600">
-                12:43 – 12:58
-              </span>
+                {evi.media_url && (
+                  <div className="mt-2 rounded-lg overflow-hidden border border-slate-200 max-h-48 bg-slate-900 flex items-center justify-center">
+                    <img src={evi.media_url} alt={evi.source_title} className="object-contain max-h-48 w-full" />
+                  </div>
+                )}
+              </div>
+            ))
+          ) : (
+            /* Fallback to observation's own source provenance */
+            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-slate-900 flex items-center gap-1.5">
+                  <FileText className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span className="truncate max-w-[200px]">
+                    {obs.source_file_name || (obs.source_file_id ? `Source: ${obs.source_file_id}` : 'Direct Upload')}
+                  </span>
+                </span>
+                {obs.page_number && (
+                  <span className="text-[10px] font-mono bg-white px-1.5 py-0.5 rounded border border-slate-200 text-slate-600 shrink-0">
+                    Page {obs.page_number}
+                  </span>
+                )}
+              </div>
+              <div className="text-xs font-mono text-slate-700 bg-white p-2.5 rounded-lg border border-slate-200/60 leading-relaxed">
+                "{obs.excerpt || obs.description}"
+              </div>
             </div>
-            <div className="text-xs font-mono text-slate-700 bg-white p-2.5 rounded-lg border border-slate-200/60 leading-relaxed">
-              "When we extracted Core 42, the manual caliper and thermistor probe confirmed the fast-ice sheet stood at exactly 1.8 meters thick."
+          )}
+
+          {obs.processing_job_id && (
+            <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-100 text-[11px] font-mono text-slate-500 flex items-center justify-between">
+              <span>Job ID:</span>
+              <span className="text-slate-800 font-semibold">{obs.processing_job_id}</span>
             </div>
-          </div>
+          )}
         </div>
 
         {/* COLUMN 2: STRUCTURED KNOWLEDGE (5 cols) */}
@@ -218,42 +264,52 @@ export function ReviewDetailPage() {
                   onClick={handleSaveEdit}
                   className="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-xs font-medium"
                 >
-                  Save & Approve
+                  Save Changes
                 </button>
               </div>
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
+              <div>
+                <div className="flex items-center gap-2 mb-2">
                   <DomainBadge domain={obs.research_domain} />
                   <span className="text-xs text-slate-400">•</span>
-                  <span className="text-xs text-slate-500">{obs.location_name}</span>
+                  <span className="text-xs text-slate-500 font-mono">
+                    {obs.location_name || 'Unspecified Location'}
+                  </span>
                 </div>
-                <h3 className="text-base font-semibold text-slate-900 leading-snug">
+                <h3 className="text-base font-bold text-slate-900 leading-snug">
                   {obs.title}
                 </h3>
               </div>
 
-              <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-100 text-xs text-slate-700 leading-relaxed">
+              <div className="text-xs text-slate-600 leading-relaxed bg-slate-50/70 p-3.5 rounded-xl border border-slate-100">
                 {obs.description}
               </div>
 
-              {/* Extracted Calibration Variables */}
+              {/* Extracted Calibration Variables (Dynamic) */}
               <div className="pt-2">
                 <span className="text-xs font-semibold text-slate-900 block mb-2">
-                  Calibrated Measurements (Sensor Linked)
+                  Calibrated Measurements
                 </span>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-100">
-                    <span className="text-[10px] font-mono uppercase text-slate-400 block">Fast-Ice Thickness</span>
-                    <span className="text-sm font-bold text-slate-900 font-mono">1.80 m</span>
+                {obs.measurements && obs.measurements.length > 0 ? (
+                  <div className="grid grid-cols-2 gap-2">
+                    {obs.measurements.map((m, idx) => (
+                      <div key={idx} className="p-2.5 rounded-lg bg-slate-50 border border-slate-100">
+                        <span className="text-[10px] font-mono uppercase text-slate-400 block">
+                          {m.variable?.replace(/_/g, ' ') || 'Metric'}
+                        </span>
+                        <span className="text-sm font-bold text-slate-900 font-mono">
+                          {m.value} {m.unit}
+                        </span>
+                      </div>
+                    ))}
                   </div>
-                  <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-100">
-                    <span className="text-[10px] font-mono uppercase text-slate-400 block">Basal Core Temp</span>
-                    <span className="text-sm font-bold text-slate-900 font-mono">-14.8 °C</span>
-                  </div>
-                </div>
+                ) : (
+                  <p className="text-xs text-slate-400 italic bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                    No quantitative measurements extracted from this source material.
+                  </p>
+                )}
               </div>
             </div>
           )}
@@ -277,11 +333,13 @@ export function ReviewDetailPage() {
             </div>
             <div className="flex items-center justify-between text-slate-600">
               <span>Confidence:</span>
-              <span className="font-mono text-slate-900">{Math.round(obs.confidence * 100)}% (High)</span>
+              <span className="font-mono text-slate-900">{Math.round(obs.confidence * 100)}%</span>
             </div>
             <div className="flex items-center justify-between text-slate-600">
-              <span>Target Station:</span>
-              <span className="font-medium text-slate-900">Bharati</span>
+              <span>Location:</span>
+              <span className="font-medium text-slate-900 truncate max-w-[130px]" title={obs.location_name}>
+                {obs.location_name || 'Unspecified'}
+              </span>
             </div>
           </div>
 
@@ -328,61 +386,7 @@ export function ReviewDetailPage() {
         knowledgeTitle={obs.title}
         confidence={obs.confidence}
         verificationStatus={obs.verification_status}
-        evidenceLinks={[
-          {
-            id: 'evi_obs1_report',
-            knowledge_type: 'observation',
-            knowledge_id: obs.id,
-            source_type: 'pdf',
-            source_id: 'doc_exp45_report',
-            source_title: 'report_expedition_45_final.pdf',
-            page_number: 17,
-            excerpt: 'Section 3.2.1 Coastal Fast-Ice Monitoring: In-situ mechanical core extraction at station perimeter point IC-45-42 yielded an uncompressed sea-ice thickness of 1.80 m (±0.02 m).',
-            confidence: 0.96,
-            verification_status: obs.verification_status,
-            created_at: new Date().toISOString()
-          },
-          {
-            id: 'evi_obs1_dataset',
-            knowledge_type: 'observation',
-            knowledge_id: obs.id,
-            source_type: 'dataset',
-            source_id: 'dts_ice_measurements',
-            source_title: 'ice_measurements_larsemann.csv',
-            row_number: 42,
-            excerpt: 'Row 42: core_id=IC-45-42, depth_m=21.0, ice_thickness_m=1.80, density_kg_m3=918, temp_c=-14.8',
-            confidence: 0.98,
-            verification_status: obs.verification_status,
-            created_at: new Date().toISOString()
-          },
-          {
-            id: 'evi_obs1_video',
-            knowledge_type: 'observation',
-            knowledge_id: obs.id,
-            source_type: 'video',
-            source_id: 'med_vid_interview',
-            source_title: 'scientist_interview.mp4',
-            timestamp_start: 758,
-            timestamp_end: 778,
-            excerpt: 'When we extracted Core 42, the manual caliper and thermistor probe confirmed the fast-ice sheet stood at exactly 1.8 meters thick.',
-            confidence: 0.94,
-            verification_status: obs.verification_status,
-            created_at: new Date().toISOString()
-          },
-          {
-            id: 'evi_obs1_image',
-            knowledge_type: 'observation',
-            knowledge_id: obs.id,
-            source_type: 'image',
-            source_id: 'med_img_larsemann',
-            source_title: 'IMG_2041.jpg',
-            excerpt: 'EXIF GPS -69.4089°S, 76.1872°E at 2026-01-14T07:15:00Z. Visual identification confirms fast-ice sheet drilling site with Larsemann iceberg backdrop.',
-            confidence: 0.97,
-            verification_status: obs.verification_status,
-            created_at: new Date().toISOString()
-          }
-        ]}
-        onApprove={handleApprove}
+        evidenceLinks={evidenceList}
       />
     </div>
   );

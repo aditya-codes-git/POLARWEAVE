@@ -13,6 +13,7 @@ export interface CrossFileLinkingInput {
   datasets: Dataset[];
   documents: Document[];
   media: MediaAsset[];
+  processingJobId?: string;
 }
 
 export interface CrossFileLinkingOutput {
@@ -21,33 +22,35 @@ export interface CrossFileLinkingOutput {
 }
 
 /**
- * Discovers cross-modal provenance evidence and connects:
- * Document -> Observation -> Dataset Row -> Image EXIF/Entities -> Video Timestamp
+ * Discovers authentic cross-modal provenance evidence strictly among the uploaded files in this processing job.
+ * NEVER creates synthetic or hardcoded Antarctic evidence for unrelated uploads.
  */
 export function linkEvidenceCrossModal(input: CrossFileLinkingInput): CrossFileLinkingOutput {
   const evidenceLinks: EvidenceLink[] = [];
   const relationships: KnowledgeRelationship[] = [];
 
   for (const obs of input.observations) {
-    // 1. Link with Documents
+    // 1. Link with Documents in this specific job
     const matchingDoc = input.documents.find(
-      (d) => d.metadata_json?.expedition_code === 'EXP-45-ANT' ||
-             d.filename.toLowerCase().includes('report') ||
-             d.filename.toLowerCase().includes('final')
-    );
+      (d) => d.id === obs.source_file_id || d.filename === obs.source_file_name
+    ) || (input.documents.length === 1 ? input.documents[0] : undefined);
 
     if (matchingDoc) {
+      const pageNum = obs.page_number || 1;
+      const excerpt = obs.excerpt || obs.description || `Extracted observation from ${matchingDoc.filename}`;
+
       evidenceLinks.push({
         id: `evi_${uuidv4().slice(0, 8)}`,
         knowledge_type: 'observation',
         knowledge_id: obs.id,
-        source_type: 'pdf',
+        source_type: matchingDoc.mime_type.includes('pdf') || matchingDoc.filename.endsWith('.pdf') ? 'pdf' : 'docx',
         source_id: matchingDoc.id,
         source_title: matchingDoc.filename,
-        page_number: 17,
-        excerpt: `Section 3.2.1 Coastal Fast-Ice Monitoring: In-situ mechanical core extraction yielded uncompressed thickness of 1.80 m.`,
-        confidence: 0.95,
-        verification_status: 'AI_EXTRACTED',
+        page_number: pageNum,
+        excerpt,
+        confidence: obs.confidence || 0.95,
+        verification_status: obs.verification_status || 'AI_EXTRACTED',
+        processing_job_id: input.processingJobId || obs.processing_job_id,
         created_at: new Date().toISOString()
       });
 
@@ -58,30 +61,32 @@ export function linkEvidenceCrossModal(input: CrossFileLinkingInput): CrossFileL
         target_entity_type: 'report',
         target_entity_id: matchingDoc.id,
         relationship_type: 'RECORDED_IN',
-        label: 'Source Report',
-        confidence: 0.95,
+        label: 'Source Document',
+        confidence: obs.confidence || 0.95,
         status: 'suggested',
         created_at: new Date().toISOString()
       });
     }
 
-    // 2. Link with Datasets
-    const matchingDataset = input.datasets.find(
-      (d) => d.title.toLowerCase().includes('ice') || d.filename.toLowerCase().includes('ice')
+    // 2. Link with Media Assets in this specific job
+    const matchingMedia = input.media.find(
+      (m) => m.id === obs.source_file_id || m.filename === obs.source_file_name
     );
 
-    if (matchingDataset) {
+    if (matchingMedia) {
+      const excerpt = matchingMedia.ai_analysis_json?.caption || `Visual content recorded in ${matchingMedia.filename}`;
       evidenceLinks.push({
         id: `evi_${uuidv4().slice(0, 8)}`,
         knowledge_type: 'observation',
         knowledge_id: obs.id,
-        source_type: 'dataset',
-        source_id: matchingDataset.id,
-        source_title: matchingDataset.filename,
-        row_number: 42,
-        excerpt: `Row 42: core_id=IC-45-42, depth_m=21.0, ice_thickness_m=1.80, density_kg_m3=918, temp_c=-14.8`,
-        confidence: 0.98,
-        verification_status: 'AI_EXTRACTED',
+        source_type: matchingMedia.type === 'video' ? 'video' : 'image',
+        source_id: matchingMedia.id,
+        source_title: matchingMedia.filename,
+        excerpt,
+        media_url: matchingMedia.thumbnail_path || matchingMedia.storage_path,
+        confidence: obs.confidence || 0.95,
+        verification_status: obs.verification_status || 'AI_EXTRACTED',
+        processing_job_id: input.processingJobId || obs.processing_job_id,
         created_at: new Date().toISOString()
       });
 
@@ -89,68 +94,37 @@ export function linkEvidenceCrossModal(input: CrossFileLinkingInput): CrossFileL
         id: `rel_${uuidv4().slice(0, 8)}`,
         source_entity_type: 'observation',
         source_entity_id: obs.id,
-        target_entity_type: 'dataset',
-        target_entity_id: matchingDataset.id,
-        relationship_type: 'MEASURED_BY',
-        label: 'Tabular Calibration',
-        confidence: 0.98,
+        target_entity_type: 'media',
+        target_entity_id: matchingMedia.id,
+        relationship_type: 'DOCUMENTED_BY',
+        label: matchingMedia.type === 'video' ? 'Video Evidence' : 'Image Evidence',
+        confidence: obs.confidence || 0.95,
         status: 'suggested',
         created_at: new Date().toISOString()
       });
     }
 
-    // 3. Link with Media Assets (Video & Image)
-    for (const m of input.media) {
-      if (m.type === 'video' && m.transcript) {
-        // Look for matching segment in transcript
-        const matchSegment = m.transcript.segments.find(
-          (s) => s.text.toLowerCase().includes('1.8') || s.text.toLowerCase().includes('ice') || s.text.toLowerCase().includes('core 42')
-        );
+    // 3. Link with Datasets in this specific job ONLY if a dataset was actually provided
+    for (const dataset of input.datasets) {
+      // Only link if dataset has columns matching variables in the observation
+      const obsTitleLower = obs.title.toLowerCase();
+      const hasMatch = dataset.columns?.some((c) =>
+        obsTitleLower.includes(c.name.toLowerCase().replace(/_/g, ' '))
+      ) || input.datasets.length === 1;
 
-        if (matchSegment) {
-          evidenceLinks.push({
-            id: `evi_${uuidv4().slice(0, 8)}`,
-            knowledge_type: 'observation',
-            knowledge_id: obs.id,
-            source_type: 'video',
-            source_id: m.id,
-            source_title: m.filename,
-            timestamp_start: matchSegment.start,
-            timestamp_end: matchSegment.end,
-            excerpt: matchSegment.text,
-            media_url: m.storage_path,
-            confidence: 0.94,
-            verification_status: 'AI_EXTRACTED',
-            created_at: new Date().toISOString()
-          });
-
-          relationships.push({
-            id: `rel_${uuidv4().slice(0, 8)}`,
-            source_entity_type: 'observation',
-            source_entity_id: obs.id,
-            target_entity_type: 'media',
-            target_entity_id: m.id,
-            relationship_type: 'DOCUMENTED_BY',
-            label: 'Scientist Interview',
-            confidence: 0.94,
-            status: 'suggested',
-            created_at: new Date().toISOString()
-          });
-        }
-      }
-
-      if (m.type === 'image') {
+      if (hasMatch) {
         evidenceLinks.push({
           id: `evi_${uuidv4().slice(0, 8)}`,
           knowledge_type: 'observation',
           knowledge_id: obs.id,
-          source_type: 'image',
-          source_id: m.id,
-          source_title: m.filename,
-          excerpt: `EXIF GPS: ${m.metadata_json?.gps?.latitude || '-69.4089'}°S, ${m.metadata_json?.gps?.longitude || '76.1872'}°E. Visual identification: ${m.ai_analysis_json?.caption || 'Drilling rig on fast ice'}`,
-          media_url: m.thumbnail_path || m.storage_path,
-          confidence: 0.96,
-          verification_status: 'AI_EXTRACTED',
+          source_type: 'dataset',
+          source_id: dataset.id,
+          source_title: dataset.filename,
+          row_number: 1,
+          excerpt: `Dataset calibration reference: ${dataset.filename} (${dataset.row_count} rows, ${dataset.column_count} columns)`,
+          confidence: 0.92,
+          verification_status: obs.verification_status || 'AI_EXTRACTED',
+          processing_job_id: input.processingJobId || obs.processing_job_id,
           created_at: new Date().toISOString()
         });
 
@@ -158,11 +132,11 @@ export function linkEvidenceCrossModal(input: CrossFileLinkingInput): CrossFileL
           id: `rel_${uuidv4().slice(0, 8)}`,
           source_entity_type: 'observation',
           source_entity_id: obs.id,
-          target_entity_type: 'media',
-          target_entity_id: m.id,
-          relationship_type: 'DOCUMENTED_BY',
-          label: 'Field Photography',
-          confidence: 0.96,
+          target_entity_type: 'dataset',
+          target_entity_id: dataset.id,
+          relationship_type: 'MEASURED_BY',
+          label: 'Tabular Calibration',
+          confidence: 0.92,
           status: 'suggested',
           created_at: new Date().toISOString()
         });

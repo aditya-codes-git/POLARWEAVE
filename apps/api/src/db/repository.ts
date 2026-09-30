@@ -187,6 +187,7 @@ export async function createDocument(
         size_bytes: doc.size_bytes,
         document_type: doc.document_type || 'expedition_report',
         processing_status: doc.processing_status || 'completed',
+        processing_job_id: doc.processing_job_id || null,
         page_count: doc.page_count || null,
         metadata_json: doc.metadata_json || {},
         created_at: doc.created_at || new Date().toISOString()
@@ -264,6 +265,7 @@ export async function createDataset(dataset: Dataset): Promise<Dataset> {
         filename: dataset.filename,
         file_path: dataset.file_path,
         source_document_id: null,
+        processing_job_id: dataset.processing_job_id || null,
         row_count: dataset.row_count || 0,
         column_count: dataset.column_count || 0,
         schema_json: dataset.columns || [],
@@ -372,8 +374,9 @@ export async function createMediaAsset(media: MediaAsset): Promise<MediaAsset> {
         thumbnail_path: media.thumbnail_path || null,
         expedition_id: expeditionId,
         location_id: null,
-        location_name: media.location_name || 'Bharati Research Station',
+        location_name: media.location_name || 'Unspecified Location',
         capture_date: media.capture_date || new Date().toISOString(),
+        processing_job_id: media.processing_job_id || null,
         metadata_json: media.metadata_json || {},
         ai_analysis_json: media.ai_analysis_json || {},
         transcript: media.transcript || {},
@@ -469,12 +472,14 @@ export async function createObservation(obs: Observation): Promise<Observation> 
         research_domain: obs.research_domain,
         observed_at: obs.observed_at || new Date().toISOString(),
         location_id: locationId,
-        location_name: obs.location_name || 'Bharati Research Station',
+        location_name: obs.location_name || 'Unspecified Location',
         confidence: obs.confidence || 0.9,
         confidence_level: obs.confidence_level || 'HIGH',
         verification_status: obs.verification_status || 'AI_EXTRACTED',
+        processing_job_id: obs.processing_job_id || null,
+        source_file_id: obs.source_file_id || null,
         created_at: obs.created_at || new Date().toISOString(),
-        demo: false
+        demo: obs.demo ?? false
       });
 
       if (error) {
@@ -539,10 +544,23 @@ export async function getObservations(filters?: {
   status?: string;
   expedition_id?: string;
   query?: string;
+  job_id?: string;
+  scope?: 'real' | 'demo' | 'all';
 }): Promise<Observation[]> {
+  const isRealScope = filters?.scope === 'real' || Boolean(filters?.job_id);
+
   if (supabase) {
     try {
       let query = supabase.from('observations').select('*').order('created_at', { ascending: false });
+
+      if (filters?.job_id) {
+        query = query.eq('processing_job_id', filters.job_id);
+      }
+      if (filters?.scope === 'real') {
+        query = query.eq('demo', false);
+      } else if (filters?.scope === 'demo') {
+        query = query.eq('demo', true);
+      }
 
       if (filters?.domain && filters.domain !== 'ALL') {
         query = query.ilike('research_domain', `%${filters.domain}%`);
@@ -558,11 +576,23 @@ export async function getObservations(filters?: {
       }
 
       const { data, error } = await query;
-      if (!error && data && data.length > 0) {
-        // Merge in any in-memory observations that might not have committed
+      if (!error && data) {
+        // If searching specifically for real data or specific job, DO NOT merge demo fixtures
+        if (isRealScope) {
+          const memMatches = memoryStore.observations.filter((o) => {
+            if (o.demo !== false) return false;
+            if (filters?.job_id && o.processing_job_id !== filters.job_id) return false;
+            return true;
+          });
+          const dbIds = new Set(data.map((d) => d.id));
+          return [...data, ...memMatches.filter((m) => !dbIds.has(m.id))];
+        }
+
+        // Otherwise merge with extra memoryStore items if not already in DB
         const dbObsIds = new Set(data.map((o) => o.id));
         const extraMemObs = memoryStore.observations.filter((o) => {
           if (dbObsIds.has(o.id)) return false;
+          if (filters?.scope === 'demo' && o.demo === false) return false;
           if (filters?.domain && filters.domain !== 'ALL' && o.research_domain.toLowerCase() !== filters.domain.toLowerCase()) return false;
           if (filters?.status && filters.status !== 'ALL' && o.verification_status !== filters.status) return false;
           if (filters?.expedition_id && o.expedition_id !== filters.expedition_id) return false;
@@ -580,8 +610,17 @@ export async function getObservations(filters?: {
     }
   }
 
-  // Fallback to memoryStore
+  // Fallback to memoryStore ONLY if scope is not strictly real
+  if (isRealScope) {
+    return memoryStore.observations.filter(
+      (o) => o.demo === false && (!filters?.job_id || o.processing_job_id === filters.job_id)
+    );
+  }
+
   let list = [...memoryStore.observations];
+  if (filters?.scope === 'demo') {
+    list = list.filter((o) => o.demo === true);
+  }
   if (filters?.domain && filters.domain !== 'ALL') {
     list = list.filter((o) => o.research_domain.toLowerCase() === filters.domain?.toLowerCase());
   }
@@ -677,6 +716,7 @@ export async function createEvidenceLinks(links: EvidenceLink[]): Promise<void> 
         media_url: l.media_url || null,
         confidence: l.confidence || 0.9,
         verification_status: l.verification_status || 'AI_EXTRACTED',
+        processing_job_id: l.processing_job_id || null,
         created_at: l.created_at || new Date().toISOString()
       }));
 
@@ -717,7 +757,7 @@ export async function getEvidenceByKnowledgeId(knowledgeId: string): Promise<any
     }
   }
 
-  // Fallback to memoryStore if DB returned nothing
+  // Fallback to memoryStore strictly for this knowledgeId
   if (links.length === 0) {
     links = memoryStore.evidenceLinks.filter((e) => e.knowledge_id === knowledgeId);
   }
@@ -735,9 +775,9 @@ export async function getEvidenceByKnowledgeId(knowledgeId: string): Promise<any
 
   return {
     knowledge_id: knowledgeId,
-    knowledge_title: observation?.title || 'Scientific Knowledge Fact',
+    knowledge_title: observation?.title || 'Scientific Knowledge Finding',
     confidence: observation?.confidence || 0.94,
-    verification_status: observation?.verification_status || 'VERIFIED',
+    verification_status: observation?.verification_status || 'AI_EXTRACTED',
     total_sources: links.length,
     evidence_chain: links,
     grouped_sources: grouped
@@ -779,7 +819,7 @@ export async function createKnowledgeRelationships(
   }
 }
 
-export async function getKnowledgeGraphData(): Promise<{ nodes: any[]; edges: any[] }> {
+export async function getKnowledgeGraphData(filters?: { jobId?: string; scope?: 'real' | 'demo' | 'all' }): Promise<{ nodes: any[]; edges: any[] }> {
   const nodes: Array<{
     id: string;
     type: string;
@@ -796,33 +836,41 @@ export async function getKnowledgeGraphData(): Promise<{ nodes: any[]; edges: an
     style?: Record<string, unknown>;
   }> = [];
 
-  // Expeditions
-  memoryStore.expeditions.forEach((exp, idx) => {
-    nodes.push({
-      id: exp.id,
-      type: 'expedition',
-      data: { title: exp.title, code: exp.code, region: exp.region, status: exp.status },
-      position: { x: 350 + idx * 300, y: 50 }
+  const isJobScoped = Boolean(filters?.jobId);
+  const isRealOnly = filters?.scope === 'real' || isJobScoped;
+
+  // Only include global demo expeditions & locations if NOT strictly scoped to a real processing job
+  if (!isJobScoped && !isRealOnly) {
+    memoryStore.expeditions.forEach((exp, idx) => {
+      nodes.push({
+        id: exp.id,
+        type: 'expedition',
+        data: { title: exp.title, code: exp.code, region: exp.region, status: exp.status },
+        position: { x: 350 + idx * 300, y: 50 }
+      });
     });
+
+    memoryStore.locations.forEach((loc, idx) => {
+      nodes.push({
+        id: loc.id,
+        type: 'location',
+        data: {
+          title: loc.name,
+          region: loc.region,
+          station: loc.station,
+          coordinates: `${loc.latitude}, ${loc.longitude}`
+        },
+        position: { x: 100 + idx * 220, y: 220 }
+      });
+    });
+  }
+
+  // Fetch persisted observations strictly according to scope
+  const observations = await getObservations({
+    job_id: filters?.jobId,
+    scope: filters?.scope || (isJobScoped ? 'real' : undefined)
   });
 
-  // Locations
-  memoryStore.locations.forEach((loc, idx) => {
-    nodes.push({
-      id: loc.id,
-      type: 'location',
-      data: {
-        title: loc.name,
-        region: loc.region,
-        station: loc.station,
-        coordinates: `${loc.latitude}, ${loc.longitude}`
-      },
-      position: { x: 100 + idx * 220, y: 220 }
-    });
-  });
-
-  // Fetch persisted observations & datasets & media
-  const observations = await getObservations();
   observations.forEach((obs, idx) => {
     nodes.push({
       id: obs.id,
@@ -833,54 +881,85 @@ export async function getKnowledgeGraphData(): Promise<{ nodes: any[]; edges: an
         confidence: obs.confidence,
         status: obs.verification_status
       },
-      position: { x: 150 + idx * 240, y: 380 }
+      position: { x: 150 + idx * 240, y: isJobScoped ? 100 : 380 }
     });
   });
 
-  const datasets = await getDatasets();
+  // Fetch relevant documents, datasets & media
+  let docs: PolarDocument[] = [];
+  let datasets: Dataset[] = [];
+  let media: MediaAsset[] = [];
+
+  if (isJobScoped && supabase) {
+    try {
+      const { data: dbDocs } = await supabase.from('documents').select('*').eq('processing_job_id', filters?.jobId);
+      if (dbDocs) docs = dbDocs;
+      const { data: dbDts } = await supabase.from('datasets').select('*').eq('processing_job_id', filters?.jobId);
+      if (dbDts) datasets = dbDts;
+      const { data: dbMed } = await supabase.from('media_assets').select('*').eq('processing_job_id', filters?.jobId);
+      if (dbMed) media = dbMed;
+    } catch (e: any) {
+      console.warn('[POLARWEAVE DB] Error fetching job assets for graph:', e?.message);
+    }
+  } else if (!isJobScoped && !isRealOnly) {
+    datasets = await getDatasets();
+    media = await getMedia();
+  }
+
+  docs.forEach((doc, idx) => {
+    nodes.push({
+      id: doc.id,
+      type: 'report',
+      data: { title: doc.filename, mime: doc.mime_type },
+      position: { x: 100 + idx * 260, y: isJobScoped ? 300 : 540 }
+    });
+  });
+
   datasets.forEach((dts, idx) => {
     nodes.push({
       id: dts.id,
       type: 'dataset',
       data: { title: dts.title, filename: dts.filename, rows: dts.row_count },
-      position: { x: 200 + idx * 280, y: 540 }
+      position: { x: 200 + idx * 280, y: isJobScoped ? 300 : 540 }
     });
   });
 
-  const media = await getMedia();
   media.forEach((med, idx) => {
     nodes.push({
       id: med.id,
       type: 'media',
       data: { title: med.filename, type: med.type, caption: med.ai_analysis_json?.caption },
-      position: { x: 500 + idx * 260, y: 540 }
+      position: { x: 450 + idx * 260, y: isJobScoped ? 300 : 540 }
     });
   });
 
-  // Fetch relationships
-  let rels = [...memoryStore.relationships];
+  // Fetch relationships for these specific nodes
+  const nodeIds = new Set(nodes.map((n) => n.id));
+  let rels = isRealOnly ? [] : [...memoryStore.relationships];
   if (supabase) {
     try {
       const { data: dbRels, error } = await supabase.from('knowledge_relationships').select('*');
       if (!error && dbRels && dbRels.length > 0) {
-        const dbRelIds = new Set(dbRels.map((r) => r.id));
-        const extraMem = memoryStore.relationships.filter((r) => !dbRelIds.has(r.id));
-        rels = [...dbRels, ...extraMem];
+        rels = [...rels, ...dbRels];
       }
     } catch (err: any) {
       console.warn('[POLARWEAVE DB] Error fetching relationships:', err?.message);
     }
   }
 
-  rels.forEach((rel) => {
-    edges.push({
-      id: rel.id,
-      source: rel.source_entity_id,
-      target: rel.target_entity_id,
-      label: rel.label || rel.relationship_type,
-      style: { stroke: '#94A3B8', strokeWidth: 1.5 },
-      animated: rel.status === 'suggested'
-    });
+  const seenEdgeIds = new Set<string>();
+  rels.filter((r) => nodeIds.has(r.source_entity_id) && nodeIds.has(r.target_entity_id)).forEach((rel) => {
+    if (!seenEdgeIds.has(rel.id)) {
+      seenEdgeIds.add(rel.id);
+      edges.push({
+        id: rel.id,
+        source: rel.source_entity_id,
+        target: rel.target_entity_id,
+        label: rel.label || rel.relationship_type,
+        style: { stroke: '#94A3B8', strokeWidth: 1.5 },
+        animated: rel.status === 'suggested'
+      });
+    }
   });
 
   return { nodes, edges };

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   ShieldCheck,
@@ -15,31 +16,39 @@ import {
   Info
 } from 'lucide-react';
 import { getObservations, getEvidenceTrace, EvidenceTracePayload } from '../../lib/api';
-import { Observation } from '@polarweave/types';
+import { Observation, EvidenceLink } from '@polarweave/types';
 import { ConfidenceBadge, VerificationBadge, DomainBadge } from '../../components/ui/badges';
 
 export function EvidenceTracePage() {
+  const [searchParams] = useSearchParams();
+  const initialObsId = searchParams.get('obsId');
+
   const [observations, setObservations] = useState<Observation[]>([]);
-  const [selectedObsId, setSelectedObsId] = useState<string>('obs_ice_thickness');
+  const [selectedObsId, setSelectedObsId] = useState<string>('');
   const [trace, setTrace] = useState<EvidenceTracePayload | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     getObservations().then((list) => {
       setObservations(list);
-      if (list.length > 0) {
+      if (initialObsId && list.some((o) => o.id === initialObsId)) {
+        setSelectedObsId(initialObsId);
+      } else if (list.length > 0) {
         setSelectedObsId(list[0].id);
       }
     });
-  }, []);
+  }, [initialObsId]);
 
   useEffect(() => {
     if (selectedObsId) {
       setLoading(true);
-      getEvidenceTrace(selectedObsId).then((res) => {
-        setTrace(res);
-        setLoading(false);
-      });
+      getEvidenceTrace(selectedObsId)
+        .then((res) => {
+          setTrace(res);
+        })
+        .finally(() => {
+          setLoading(false);
+        });
     }
   }, [selectedObsId]);
 
@@ -61,13 +70,13 @@ export function EvidenceTracePage() {
             Evidence Trace
           </h1>
           <p className="text-xs text-slate-500 mt-1">
-            Every scientific fact is anchored to multi-modal source evidence: document pages, dataset rows, video timestamps, and authenticated EXIF photography.
+            Every scientific fact is anchored to authentic source evidence: document pages, dataset rows, video timestamps, or authenticated photographic assets.
           </p>
         </div>
 
         {/* Observation Selector Dropdown */}
         <div className="flex items-center gap-2">
-          <label className="text-xs font-medium text-slate-500">Select Fact:</label>
+          <label className="text-xs font-medium text-slate-500">Select Finding:</label>
           <select
             value={selectedObsId}
             onChange={(e) => setSelectedObsId(e.target.value)}
@@ -90,15 +99,15 @@ export function EvidenceTracePage() {
             <div className="absolute top-0 right-0 w-48 h-48 bg-polar-50/50 rounded-full blur-3xl pointer-events-none" />
 
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-4">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <DomainBadge domain={selectedObs.research_domain} />
                 <span className="text-xs text-slate-400">•</span>
                 <span className="text-xs font-medium text-slate-600">
-                  {selectedObs.location_name}
+                  {selectedObs.location_name || 'Unspecified Location'}
                 </span>
                 <span className="text-xs text-slate-400">•</span>
                 <span className="text-xs text-slate-500 font-mono">
-                  {selectedObs.expedition_title || 'Expedition 45'}
+                  {selectedObs.source_file_name || (selectedObs.demo ? 'Expedition 45' : 'Uploaded Package')}
                 </span>
               </div>
 
@@ -111,7 +120,7 @@ export function EvidenceTracePage() {
 
             <div className="mt-4">
               <span className="text-[11px] font-mono text-polar-700 uppercase tracking-wider font-semibold block mb-1">
-                Extracted Scientific Claim
+                Structured Scientific Claim
               </span>
               <h2 className="text-xl font-bold text-slate-900 leading-snug">
                 "{selectedObs.title}"
@@ -126,7 +135,9 @@ export function EvidenceTracePage() {
               <div className="flex items-center gap-2">
                 <ShieldCheck className="w-4 h-4 text-emerald-600" />
                 <span className="font-semibold text-slate-800">
-                  Corroborated by {trace.total_sources} Distinct Physical & Multimodal Sources
+                  {trace.evidence_chain.length > 0
+                    ? `Corroborated by ${trace.evidence_chain.length} Verified Physical & Multimodal Source(s)`
+                    : 'Directly Derived from Uploaded Source Document'}
                 </span>
               </div>
               <span className="font-mono text-slate-400">
@@ -135,183 +146,105 @@ export function EvidenceTracePage() {
             </div>
           </div>
 
-          {/* 4-WAY MULTIMODAL PROVENANCE GRID (Section 18 & 44) */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {/* 1. REPORT (PDF PAGE 17) */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-subtle hover:border-slate-300 transition-all flex flex-col justify-between">
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center">
-                      <FileText className="w-4 h-4" />
+          {/* DYNAMIC MULTIMODAL PROVENANCE GRID */}
+          {trace.evidence_chain.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {trace.evidence_chain.map((link, idx) => (
+                <div
+                  key={link.id || idx}
+                  className="bg-white border border-slate-200 rounded-2xl p-5 shadow-subtle hover:border-slate-300 transition-all flex flex-col justify-between"
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                          link.source_type === 'pdf' || link.source_type === 'docx'
+                            ? 'bg-rose-50 text-rose-600'
+                            : link.source_type === 'dataset'
+                            ? 'bg-emerald-50 text-emerald-600'
+                            : link.source_type === 'video'
+                            ? 'bg-blue-50 text-blue-600'
+                            : 'bg-purple-50 text-purple-600'
+                        }`}>
+                          {link.source_type === 'pdf' || link.source_type === 'docx' ? (
+                            <FileText className="w-4 h-4" />
+                          ) : link.source_type === 'dataset' ? (
+                            <Database className="w-4 h-4" />
+                          ) : link.source_type === 'video' ? (
+                            <Film className="w-4 h-4" />
+                          ) : (
+                            <ImageIcon className="w-4 h-4" />
+                          )}
+                        </div>
+                        <div>
+                          <span className="text-xs font-semibold text-slate-900 block truncate max-w-[220px]" title={link.source_title}>
+                            {link.source_title}
+                          </span>
+                          <span className="text-[11px] text-slate-400 font-mono uppercase">
+                            {link.source_type} Source
+                          </span>
+                        </div>
+                      </div>
+
+                      {link.page_number && (
+                        <span className="px-2 py-0.5 rounded bg-rose-50 text-rose-700 text-xs font-mono font-semibold border border-rose-200">
+                          Page {link.page_number}
+                        </span>
+                      )}
+                      {link.row_number && (
+                        <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 text-xs font-mono font-semibold border border-emerald-200">
+                          Row #{link.row_number}
+                        </span>
+                      )}
+                      {link.timestamp_start !== undefined && (
+                        <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 text-xs font-mono font-semibold border border-blue-200 flex items-center gap-1">
+                          <Play className="w-3 h-3 fill-current" />
+                          {Math.floor(link.timestamp_start / 60)}:{(link.timestamp_start % 60).toString().padStart(2, '0')}
+                        </span>
+                      )}
                     </div>
-                    <div>
-                      <span className="text-xs font-semibold text-slate-900 block">
-                        1. Expedition Report
-                      </span>
-                      <span className="text-[11px] text-slate-400 font-mono">
-                        report_expedition_45_final.pdf
-                      </span>
+
+                    <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-100 font-mono text-xs text-slate-700 leading-relaxed break-words">
+                      "{link.excerpt}"
                     </div>
+
+                    {link.media_url && (
+                      <div className="rounded-xl overflow-hidden border border-slate-200 max-h-48 bg-slate-900 flex items-center justify-center">
+                        <img src={link.media_url} alt={link.source_title} className="w-full h-40 object-cover" />
+                      </div>
+                    )}
                   </div>
-                  <span className="px-2 py-0.5 rounded bg-rose-50 text-rose-700 text-xs font-mono font-semibold border border-rose-200">
-                    Page 17
-                  </span>
-                </div>
 
-                <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-100 font-mono text-xs text-slate-700 leading-relaxed">
-                  "Section 3.2.1 Coastal Fast-Ice Monitoring: In-situ mechanical core extraction at station perimeter point IC-45-42 yielded an uncompressed sea-ice thickness of 1.80 m (±0.02 m), validating airborne EM survey profiles."
+                  <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+                    <span className="text-slate-400 font-mono">{link.source_id || 'Authenticated Upload'}</span>
+                    <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded font-mono text-[11px] border border-emerald-200">
+                      Verified Provenance ({Math.round(link.confidence * 100)}%)
+                    </span>
+                  </div>
                 </div>
-              </div>
-
-              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
-                <span className="text-slate-400">Section 3.2.1 • Paragraph 2</span>
-                <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded font-mono text-[11px] border border-emerald-200">
-                  Exact Match (96%)
-                </span>
-              </div>
+              ))}
             </div>
-
-            {/* 2. DATASET (CSV ROW 42) */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-subtle hover:border-slate-300 transition-all flex flex-col justify-between">
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
-                      <Database className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <span className="text-xs font-semibold text-slate-900 block">
-                        2. Sensor Dataset
-                      </span>
-                      <span className="text-[11px] text-slate-400 font-mono">
-                        ice_measurements_larsemann.csv
-                      </span>
-                    </div>
-                  </div>
-                  <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 text-xs font-mono font-semibold border border-emerald-200">
-                    Row #42
-                  </span>
-                </div>
-
-                <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-100 font-mono text-xs text-slate-700 space-y-1">
-                  <div className="flex justify-between border-b border-slate-200/60 pb-1">
-                    <span className="text-slate-400">core_id:</span>
-                    <span className="font-semibold text-slate-900">IC-45-42</span>
-                  </div>
-                  <div className="flex justify-between border-b border-slate-200/60 py-1">
-                    <span className="text-slate-400">ice_thickness_m:</span>
-                    <span className="font-bold text-polar-700">1.80 m</span>
-                  </div>
-                  <div className="flex justify-between border-b border-slate-200/60 py-1">
-                    <span className="text-slate-400">density_kg_m3:</span>
-                    <span className="font-semibold text-slate-900">918 kg/m³</span>
-                  </div>
-                  <div className="flex justify-between pt-1">
-                    <span className="text-slate-400">temp_c:</span>
-                    <span className="font-semibold text-slate-900">-14.8 °C</span>
-                  </div>
-                </div>
+          ) : (
+            /* Observation with single document origin */
+            <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center space-y-3 shadow-subtle">
+              <div className="w-12 h-12 rounded-2xl bg-polar-50 text-polar-600 flex items-center justify-center mx-auto border border-polar-200">
+                <FileText className="w-6 h-6" />
               </div>
-
-              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
-                <span className="text-slate-400">Borehole Calibration Log</span>
-                <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded font-mono text-[11px] border border-emerald-200">
-                  Exact Match (98%)
+              <h3 className="text-base font-semibold text-slate-900">Direct Source Provenance</h3>
+              <p className="text-xs text-slate-500 max-w-lg mx-auto">
+                This scientific finding originated directly from{' '}
+                <span className="font-semibold text-slate-800 font-mono">
+                  {selectedObs.source_file_name || selectedObs.source_file_id || 'Uploaded Document'}
                 </span>
-              </div>
+                {selectedObs.page_number ? ` on Page ${selectedObs.page_number}` : ''}.
+              </p>
+              {selectedObs.excerpt && (
+                <div className="mt-4 p-4 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-700 text-left max-w-xl mx-auto leading-relaxed">
+                  "{selectedObs.excerpt}"
+                </div>
+              )}
             </div>
-
-            {/* 3. VIDEO INTERVIEW (12:43 – 12:58) */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-subtle hover:border-slate-300 transition-all flex flex-col justify-between">
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
-                      <Film className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <span className="text-xs font-semibold text-slate-900 block">
-                        3. Scientist Field Interview
-                      </span>
-                      <span className="text-[11px] text-slate-400 font-mono">
-                        scientist_interview.mp4
-                      </span>
-                    </div>
-                  </div>
-                  <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 text-xs font-mono font-semibold border border-blue-200 flex items-center gap-1">
-                    <Play className="w-3 h-3 fill-current" />
-                    12:43 – 12:58
-                  </span>
-                </div>
-
-                <div className="p-3 bg-slate-900 rounded-xl text-white space-y-2">
-                  <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono">
-                    <span>Glaciology Audio Track</span>
-                    <span className="text-polar-400">Seek: 12:43</span>
-                  </div>
-                  <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                    <div className="bg-polar-500 h-full w-[61%]" />
-                  </div>
-                  <p className="text-xs text-slate-200 font-mono leading-relaxed pt-1">
-                    "When we extracted Core 42, the manual caliper and thermistor probe confirmed the fast-ice sheet stood at exactly 1.8 meters thick."
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
-                <span className="text-slate-400">Dr. Rajesh Sharma, NCPOR</span>
-                <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded font-mono text-[11px] border border-emerald-200">
-                  Transcribed Audio (94%)
-                </span>
-              </div>
-            </div>
-
-            {/* 4. PHOTOGRAPHY & EXIF GPS */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-subtle hover:border-slate-300 transition-all flex flex-col justify-between">
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center">
-                      <ImageIcon className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <span className="text-xs font-semibold text-slate-900 block">
-                        4. Authenticated Photography
-                      </span>
-                      <span className="text-[11px] text-slate-400 font-mono">
-                        IMG_2041.jpg
-                      </span>
-                    </div>
-                  </div>
-                  <span className="px-2 py-0.5 rounded bg-purple-50 text-purple-700 text-xs font-mono font-semibold border border-purple-200">
-                    EXIF Verified
-                  </span>
-                </div>
-
-                <div className="rounded-xl overflow-hidden border border-slate-200 relative group">
-                  <img
-                    src="https://images.unsplash.com/photo-1517411032315-54ef2cb783bb?auto=format&fit=crop&w=800&q=80"
-                    alt="Fast-ice site"
-                    className="w-full h-32 object-cover"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent flex items-end p-2.5">
-                    <div className="text-[11px] font-mono text-white leading-tight">
-                      <div>GPS: -69.4089°S, 76.1872°E</div>
-                      <div className="text-slate-300 text-[10px]">Camera: Nikon Z8 • ISO 100 • 1/1000s</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
-                <span className="text-slate-400">Bharati Coastal Offing</span>
-                <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded font-mono text-[11px] border border-emerald-200">
-                  Visual Authenticated (97%)
-                </span>
-              </div>
-            </div>
-          </div>
+          )}
         </div>
       )}
     </div>

@@ -22,21 +22,17 @@ interface UploadItem {
   type: string;
   size: string;
   category: 'PDF' | 'CSV' | 'DOCX' | 'IMAGE' | 'VIDEO';
+  fileObj?: File;
 }
 
 export function IngestPage() {
   const navigate = useNavigate();
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isDemoPackage, setIsDemoPackage] = useState(false);
 
-  // Default sample research package for seamless SIH judging
-  const [files, setFiles] = useState<UploadItem[]>([
-    { id: '1', name: 'report_expedition_45_final.pdf', type: 'application/pdf', size: '2.4 MB', category: 'PDF' },
-    { id: '2', name: 'ice_measurements_larsemann.csv', type: 'text/csv', size: '422 KB', category: 'CSV' },
-    { id: '3', name: 'field_notes_glaciology_diary.docx', type: 'application/vnd.docx', size: '640 KB', category: 'DOCX' },
-    { id: '4', name: 'IMG_2041.jpg', type: 'image/jpeg', size: '3.1 MB', category: 'IMAGE' },
-    { id: '5', name: 'scientist_interview.mp4', type: 'video/mp4', size: '28.4 MB', category: 'VIDEO' }
-  ]);
+  // Staging area starts clean (Section 2 & 3: REAL INGESTION ≠ DEMO DATA)
+  const [files, setFiles] = useState<UploadItem[]>([]);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -51,20 +47,22 @@ export function IngestPage() {
     e.preventDefault();
     setIsDragging(false);
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      setIsDemoPackage(false);
       const newItems: UploadItem[] = Array.from(e.dataTransfer.files).map((f, i) => {
         const ext = f.name.split('.').pop()?.toLowerCase();
         let cat: UploadItem['category'] = 'PDF';
         if (ext === 'csv' || ext === 'xlsx') cat = 'CSV';
         else if (ext === 'docx') cat = 'DOCX';
-        else if (['jpg', 'jpeg', 'png'].includes(ext || '')) cat = 'IMAGE';
-        else if (['mp4', 'mov'].includes(ext || '')) cat = 'VIDEO';
+        else if (['jpg', 'jpeg', 'png', 'webp'].includes(ext || '')) cat = 'IMAGE';
+        else if (['mp4', 'mov', 'webm'].includes(ext || '')) cat = 'VIDEO';
 
         return {
           id: `upload_${Date.now()}_${i}`,
           name: f.name,
-          type: f.type,
-          size: `${(f.size / (1024 * 1024)).toFixed(1)} MB`,
-          category: cat
+          type: f.type || 'application/octet-stream',
+          size: f.size > 1024 * 1024 ? `${(f.size / (1024 * 1024)).toFixed(1)} MB` : `${Math.max(1, Math.round(f.size / 1024))} KB`,
+          category: cat,
+          fileObj: f
         };
       });
       setFiles((prev) => [...prev, ...newItems]);
@@ -73,20 +71,22 @@ export function IngestPage() {
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
+      setIsDemoPackage(false);
       const newItems: UploadItem[] = Array.from(e.target.files).map((f, i) => {
         const ext = f.name.split('.').pop()?.toLowerCase();
         let cat: UploadItem['category'] = 'PDF';
         if (ext === 'csv' || ext === 'xlsx') cat = 'CSV';
         else if (ext === 'docx') cat = 'DOCX';
-        else if (['jpg', 'jpeg', 'png'].includes(ext || '')) cat = 'IMAGE';
-        else if (['mp4', 'mov'].includes(ext || '')) cat = 'VIDEO';
+        else if (['jpg', 'jpeg', 'png', 'webp'].includes(ext || '')) cat = 'IMAGE';
+        else if (['mp4', 'mov', 'webm'].includes(ext || '')) cat = 'VIDEO';
 
         return {
           id: `upload_${Date.now()}_${i}`,
           name: f.name,
-          type: f.type,
-          size: `${(f.size / (1024 * 1024)).toFixed(1)} MB`,
-          category: cat
+          type: f.type || 'application/octet-stream',
+          size: f.size > 1024 * 1024 ? `${(f.size / (1024 * 1024)).toFixed(1)} MB` : `${Math.max(1, Math.round(f.size / 1024))} KB`,
+          category: cat,
+          fileObj: f
         };
       });
       setFiles((prev) => [...prev, ...newItems]);
@@ -98,24 +98,45 @@ export function IngestPage() {
   };
 
   const loadStandardDemoPackage = () => {
+    setIsDemoPackage(true);
     setFiles([
-      { id: '1', name: 'report_expedition_45_final.pdf', type: 'application/pdf', size: '2.4 MB', category: 'PDF' },
-      { id: '2', name: 'ice_measurements_larsemann.csv', type: 'text/csv', size: '422 KB', category: 'CSV' },
-      { id: '3', name: 'field_notes_glaciology_diary.docx', type: 'application/vnd.docx', size: '640 KB', category: 'DOCX' },
-      { id: '4', name: 'IMG_2041.jpg', type: 'image/jpeg', size: '3.1 MB', category: 'IMAGE' },
-      { id: '5', name: 'scientist_interview.mp4', type: 'video/mp4', size: '28.4 MB', category: 'VIDEO' }
+      { id: 'demo_1', name: 'report_expedition_45_final.pdf', type: 'application/pdf', size: '2.4 MB', category: 'PDF' },
+      { id: 'demo_2', name: 'ice_measurements_larsemann.csv', type: 'text/csv', size: '422 KB', category: 'CSV' },
+      { id: 'demo_3', name: 'field_notes_glaciology_diary.docx', type: 'application/vnd.docx', size: '640 KB', category: 'DOCX' },
+      { id: 'demo_4', name: 'IMG_2041.jpg', type: 'image/jpeg', size: '3.1 MB', category: 'IMAGE' },
+      { id: 'demo_5', name: 'scientist_interview.mp4', type: 'video/mp4', size: '28.4 MB', category: 'VIDEO' }
     ]);
   };
 
   const handleProcess = async () => {
+    if (files.length === 0) return;
     setIsProcessing(true);
+
     try {
-      // Trigger process endpoint
-      await processPackage();
-      navigate('/workspace/processing');
+      const realFiles = files.filter((f) => f.fileObj);
+      let result;
+
+      if (realFiles.length > 0) {
+        const formData = new FormData();
+        realFiles.forEach((f) => {
+          formData.append('files', f.fileObj!);
+        });
+        result = await processPackage(formData);
+      } else {
+        // Fallback for explicitly loaded demo package
+        result = await processPackage();
+      }
+
+      if (result?.job?.id) {
+        navigate(`/workspace/processing?jobId=${result.job.id}`);
+      } else {
+        navigate('/workspace/processing');
+      }
     } catch (e) {
-      console.error(e);
+      console.error('[POLARWEAVE Ingest] Processing error:', e);
       navigate('/workspace/processing');
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -128,17 +149,17 @@ export function IngestPage() {
             Multimodal Ingestion
           </span>
           <span className="text-xs text-slate-400">•</span>
-          <span className="text-xs text-slate-500">Expedition 45 Ingestion Center</span>
+          <span className="text-xs text-slate-500">Autonomous Ingestion Pipeline</span>
         </div>
         <h1 className="text-2xl font-bold tracking-tight text-slate-900">
           Drop Research Material Here
         </h1>
         <p className="text-sm text-slate-500 mt-1">
-          POLARWEAVE ingests heterogeneous field packages (PDF, CSV, DOCX, images, and timestamped videos) and structures them into verified knowledge.
+          POLARWEAVE ingests heterogeneous field packages (PDF, CSV, DOCX, images, and videos) and deterministically structures them into verified scientific records.
         </p>
       </div>
 
-      {/* Hero Dropzone (Section 11) */}
+      {/* Hero Dropzone */}
       <div
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
@@ -165,7 +186,7 @@ export function IngestPage() {
           Drop research material here
         </h3>
         <p className="text-xs text-slate-500 max-w-md mx-auto mb-4">
-          PDF, DOCX, CSV, XLSX, high-resolution JPG/PNG and MP4 expedition recordings
+          PDF, DOCX, CSV, XLSX, high-resolution JPG/PNG and MP4 recordings
         </p>
 
         <div className="flex items-center justify-center gap-3">
@@ -180,7 +201,7 @@ export function IngestPage() {
             onClick={loadStandardDemoPackage}
             className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-all border border-slate-200"
           >
-            Load Expedition 45 Sample Package
+            Load Sample Package (Demo)
           </button>
         </div>
       </div>
@@ -189,22 +210,32 @@ export function IngestPage() {
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-subtle space-y-4">
         <div className="flex items-center justify-between border-b border-slate-100 pb-3">
           <div>
-            <h2 className="text-sm font-semibold text-slate-900">
-              Package Staging ({files.length} items)
+            <h2 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+              <span>Package Staging ({files.length} items)</span>
+              {isDemoPackage && (
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 font-semibold">
+                  Demo Fixture Mode
+                </span>
+              )}
             </h2>
             <p className="text-xs text-slate-400">
               Ready for deterministic parsing & AI structuring engine
             </p>
           </div>
-          <button
-            onClick={() => setFiles([])}
-            className="text-xs text-slate-400 hover:text-rose-600 transition-colors"
-          >
-            Clear All
-          </button>
+          {files.length > 0 && (
+            <button
+              onClick={() => {
+                setFiles([]);
+                setIsDemoPackage(false);
+              }}
+              className="text-xs text-slate-400 hover:text-rose-600 transition-colors"
+            >
+              Clear All
+            </button>
+          )}
         </div>
 
-        {/* Elegant Rows as requested in Section 11 */}
+        {/* Rows */}
         <div className="divide-y divide-slate-100">
           {files.map((file) => (
             <div
@@ -223,7 +254,7 @@ export function IngestPage() {
                     {file.name}
                   </div>
                   <div className="text-[11px] text-slate-400 font-mono">
-                    {file.category} • {file.size}
+                    {file.category} • {file.size} {file.fileObj ? '• Local File' : '• Fixture'}
                   </div>
                 </div>
               </div>
@@ -245,25 +276,30 @@ export function IngestPage() {
 
           {files.length === 0 && (
             <div className="py-8 text-center text-xs text-slate-400">
-              No files in staging area. Drag and drop research files or click "Load Sample Package".
+              No files in staging area. Drag and drop your research files above, or click "Load Sample Package (Demo)" for seeded fixtures.
             </div>
           )}
         </div>
 
         {/* Processing CTA */}
         {files.length > 0 && (
-          <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
+          <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-2 text-xs text-slate-500">
-              <Info className="w-4 h-4 text-polar-600" />
-              <span>Target Expedition: 45th Indian Scientific Expedition to Antarctica</span>
+              <Info className="w-4 h-4 text-polar-600 shrink-0" />
+              <span>
+                {isDemoPackage
+                  ? 'Source Mode: Demo Expeditions Fixture Package'
+                  : `Source Mode: Real Upload Package (${files.filter((f) => f.fileObj).length} real file(s))`
+                }
+              </span>
             </div>
             <button
               onClick={handleProcess}
               disabled={isProcessing}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white text-xs font-semibold shadow-sm transition-all"
+              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white text-xs font-semibold shadow-sm transition-all shrink-0"
             >
               <Sparkles className="w-4 h-4 text-polar-400" />
-              <span>{isProcessing ? 'Initiating Pipeline...' : 'Process Materials'}</span>
+              <span>{isProcessing ? 'Processing Materials...' : `Process ${files.length} Item(s)`}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>

@@ -12,12 +12,14 @@ import {
 
 export async function getObservations(req: Request, res: Response) {
   try {
-    const { domain, status, expedition_id, query } = req.query;
+    const { domain, status, expedition_id, query, job_id, scope } = req.query;
     const list = await fetchObservations({
       domain: typeof domain === 'string' ? domain : undefined,
       status: typeof status === 'string' ? status : undefined,
       expedition_id: typeof expedition_id === 'string' ? expedition_id : undefined,
-      query: typeof query === 'string' ? query : undefined
+      query: typeof query === 'string' ? query : undefined,
+      job_id: typeof job_id === 'string' ? job_id : undefined,
+      scope: typeof scope === 'string' ? (scope as 'real' | 'demo' | 'all') : undefined
     });
 
     return res.status(200).json({
@@ -241,7 +243,11 @@ export async function getMediaById(req: Request, res: Response) {
 
 export async function getKnowledgeGraph(req: Request, res: Response) {
   try {
-    const graphData = await getKnowledgeGraphData();
+    const { job_id, scope } = req.query;
+    const graphData = await getKnowledgeGraphData({
+      jobId: typeof job_id === 'string' ? job_id : undefined,
+      scope: typeof scope === 'string' ? (scope as 'real' | 'demo' | 'all') : undefined
+    });
     return res.status(200).json({
       success: true,
       data: graphData

@@ -47,16 +47,30 @@ async function safeFetch<T>(endpoint: string, options?: RequestInit): Promise<T>
 // ---------------------------------------------
 // OBSERVATIONS
 // ---------------------------------------------
-export async function getObservations(filters?: { domain?: string; status?: string; expedition_id?: string; query?: string }): Promise<Observation[]> {
+export async function getObservations(filters?: {
+  domain?: string;
+  status?: string;
+  expedition_id?: string;
+  query?: string;
+  job_id?: string;
+  scope?: 'real' | 'demo' | 'all';
+}): Promise<Observation[]> {
   try {
     const params = new URLSearchParams();
     if (filters?.domain) params.append('domain', filters.domain);
     if (filters?.status) params.append('status', filters.status);
     if (filters?.expedition_id) params.append('expedition_id', filters.expedition_id);
     if (filters?.query) params.append('query', filters.query);
+    if (filters?.job_id) params.append('job_id', filters.job_id);
+    if (filters?.scope) params.append('scope', filters.scope);
 
     return await safeFetch<Observation[]>(`/api/knowledge?${params.toString()}`);
-  } catch {
+  } catch (err) {
+    if (filters?.scope === 'real' || filters?.job_id) {
+      // Do NOT fallback to demo data if real uploads or specific jobs are requested
+      return [];
+    }
+
     let list = [...DEMO_OBSERVATIONS];
     if (filters?.domain && filters.domain !== 'ALL') {
       list = list.filter((o) => o.research_domain.toLowerCase() === filters.domain?.toLowerCase());
@@ -75,17 +89,21 @@ export async function getObservations(filters?: { domain?: string; status?: stri
 export async function getObservationById(id: string): Promise<Observation & { measurements?: any[]; evidence?: EvidenceLink[] }> {
   try {
     return await safeFetch<Observation & { measurements?: any[]; evidence?: EvidenceLink[] }>(`/api/knowledge/${id}`);
-  } catch {
-    const obs = DEMO_OBSERVATIONS.find((o) => o.id === id) || DEMO_OBSERVATIONS[0];
-    const evidence = DEMO_EVIDENCE_LINKS.filter((e) => e.knowledge_id === obs.id);
-    return {
-      ...obs,
-      measurements: [
-        { variable: 'ice_thickness', value: 1.80, unit: 'm', confidence: 0.98 },
-        { variable: 'temperature', value: -14.8, unit: '°C', confidence: 0.96 }
-      ],
-      evidence
-    };
+  } catch (err) {
+    // Only return seeded observation for explicitly seeded demo IDs
+    const demoObs = DEMO_OBSERVATIONS.find((o) => o.id === id);
+    if (demoObs) {
+      const evidence = DEMO_EVIDENCE_LINKS.filter((e) => e.knowledge_id === demoObs.id);
+      return {
+        ...demoObs,
+        measurements: [
+          { variable: 'ice_thickness', value: 1.80, unit: 'm', confidence: 0.98 },
+          { variable: 'temperature', value: -14.8, unit: '°C', confidence: 0.96 }
+        ],
+        evidence
+      };
+    }
+    throw err;
   }
 }
 
@@ -112,21 +130,41 @@ export async function getEvidenceTrace(knowledgeId: string): Promise<EvidenceTra
   try {
     return await safeFetch<EvidenceTracePayload>(`/api/evidence/${knowledgeId}`);
   } catch {
-    const links = DEMO_EVIDENCE_LINKS.filter((e) => e.knowledge_id === knowledgeId);
-    const obs = DEMO_OBSERVATIONS.find((o) => o.id === knowledgeId);
+    // Only return demo links if the requested ID is explicitly a demo observation
+    if (knowledgeId === 'obs_ice_thickness' || knowledgeId.startsWith('demo_')) {
+      const links = DEMO_EVIDENCE_LINKS.filter((e) => e.knowledge_id === knowledgeId);
+      const obs = DEMO_OBSERVATIONS.find((o) => o.id === knowledgeId);
+      return {
+        knowledge_id: knowledgeId,
+        knowledge_title: obs?.title || 'Surface ice measurement recorded at 1.8 m',
+        confidence: obs?.confidence || 0.94,
+        verification_status: obs?.verification_status || 'VERIFIED',
+        total_sources: links.length,
+        evidence_chain: links,
+        grouped_sources: {
+          reports: links.filter((l) => l.source_type === 'pdf' || l.source_type === 'docx'),
+          datasets: links.filter((l) => l.source_type === 'dataset'),
+          videos: links.filter((l) => l.source_type === 'video'),
+          images: links.filter((l) => l.source_type === 'image'),
+          field_notes: links.filter((l) => l.source_type === 'field_note')
+        }
+      };
+    }
+
+    // For any real uploaded observation, NEVER fabricate demo links
     return {
       knowledge_id: knowledgeId,
-      knowledge_title: obs?.title || 'Surface ice measurement recorded at 1.8 m',
-      confidence: obs?.confidence || 0.94,
-      verification_status: obs?.verification_status || 'VERIFIED',
-      total_sources: links.length,
-      evidence_chain: links,
+      knowledge_title: 'Evidence Trace',
+      confidence: 0.9,
+      verification_status: 'AI_EXTRACTED',
+      total_sources: 0,
+      evidence_chain: [],
       grouped_sources: {
-        reports: links.filter((l) => l.source_type === 'pdf' || l.source_type === 'docx'),
-        datasets: links.filter((l) => l.source_type === 'dataset'),
-        videos: links.filter((l) => l.source_type === 'video'),
-        images: links.filter((l) => l.source_type === 'image'),
-        field_notes: links.filter((l) => l.source_type === 'field_note')
+        reports: [],
+        datasets: [],
+        videos: [],
+        images: [],
+        field_notes: []
       }
     };
   }
@@ -202,38 +240,57 @@ export async function getMedia(type?: string): Promise<MediaAsset[]> {
 // ---------------------------------------------
 // INGESTION & PROCESSING
 // ---------------------------------------------
-export async function processPackage(formData?: FormData): Promise<{ job: ProcessingJob; extracted_observations: Observation[] }> {
-  try {
-    const res = await fetch(`${API_BASE}/api/ingest/process`, {
-      method: 'POST',
-      body: formData
-    });
-    const json = await res.json();
-    return json.data;
-  } catch {
-    return {
-      job: DEMO_JOBS[0],
-      extracted_observations: DEMO_OBSERVATIONS
-    };
+export async function processPackage(formData?: FormData): Promise<{ job: ProcessingJob; extracted_observations: Observation[]; evidence_links_count: number }> {
+  const options: RequestInit = {
+    method: 'POST'
+  };
+
+  if (formData) {
+    options.body = formData;
+  } else {
+    options.headers = { 'Content-Type': 'application/json' };
+    options.body = JSON.stringify({ expedition_id: 'exp_45_ant' });
   }
+
+  const res = await fetch(`${API_BASE}/api/ingest/process`, options);
+  if (!res.ok) {
+    const errorJson = await res.json().catch(() => ({}));
+    throw new Error(errorJson?.error?.message || `Processing failed with status ${res.status}`);
+  }
+  const json = await res.json();
+  if (json.success && json.data) {
+    return json.data;
+  }
+  throw new Error(json.error?.message || 'Processing failed');
 }
 
 export async function getProcessingJobs(): Promise<ProcessingJob[]> {
   try {
-    return await safeFetch<ProcessingJob[]>('/api/processing/jobs');
+    return await safeFetch<ProcessingJob[]>('/api/ingest/jobs');
   } catch {
     return DEMO_JOBS;
   }
 }
 
+export async function getJobById(id: string): Promise<ProcessingJob> {
+  return await safeFetch<ProcessingJob>(`/api/ingest/jobs/${id}`);
+}
+
 // ---------------------------------------------
 // KNOWLEDGE GRAPH
 // ---------------------------------------------
-export async function getKnowledgeGraph(): Promise<{ nodes: any[]; edges: any[] }> {
+export async function getKnowledgeGraph(params?: { jobId?: string; scope?: string }): Promise<{ nodes: any[]; edges: any[] }> {
   try {
-    return await safeFetch<{ nodes: any[]; edges: any[] }>('/api/knowledge/graph');
+    const q = new URLSearchParams();
+    if (params?.jobId) q.append('job_id', params.jobId);
+    if (params?.scope) q.append('scope', params.scope);
+    const queryStr = q.toString() ? `?${q.toString()}` : '';
+    return await safeFetch<{ nodes: any[]; edges: any[] }>(`/api/knowledge/graph${queryStr}`);
   } catch {
-    // Generate default nodes & edges for graph visualization
+    if (params?.jobId || params?.scope === 'real') {
+      return { nodes: [], edges: [] };
+    }
+    // Generate default nodes & edges for graph visualization in demo mode only
     const nodes = [
       { id: 'exp_45_ant', type: 'expedition', data: { title: 'Expedition 45 (Antarctica)', code: 'EXP-45-ANT' }, position: { x: 300, y: 30 } },
       { id: 'loc_bharati', type: 'location', data: { title: 'Bharati Station', station: 'Bharati' }, position: { x: 120, y: 150 } },
