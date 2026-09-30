@@ -228,18 +228,16 @@ export function RoleProvider({ children }: { children: ReactNode }) {
     }
 
     // Routing check:
-    // Only route to /onboarding if:
-    // 1. User is not admin
-    // 2. User has NOT completed onboarding
-    // 3. User is not already on /onboarding
-    if (!onboardingCompleted && !isAdm) {
-      if (window.location.pathname !== '/onboarding') {
-        navigate('/onboarding', { replace: true });
+    // Only route if not currently on /auth/callback (which performs dedicated resolution)
+    if (window.location.pathname !== '/auth/callback') {
+      if (!onboardingCompleted && !isAdm) {
+        if (window.location.pathname !== '/onboarding') {
+          navigate('/onboarding', { replace: true });
+        }
+      } else if (onboardingCompleted && window.location.pathname === '/onboarding') {
+        const target = resolvedRole === 'public' ? '/explore' : '/workspace';
+        navigate(target, { replace: true });
       }
-    } else if (onboardingCompleted && window.location.pathname === '/onboarding') {
-      // If user has completed onboarding but landed on /onboarding, redirect them to their workspace/portal
-      const target = resolvedRole === 'public' ? '/explore' : '/workspace';
-      navigate(target, { replace: true });
     }
   };
 
