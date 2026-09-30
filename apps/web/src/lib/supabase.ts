@@ -78,7 +78,7 @@ export async function signInWithGoogle(redirectTo?: string) {
     throw new Error('Supabase client is not configured. Please check VITE_SUPABASE_URL.');
   }
 
-  const destination = redirectTo || `${window.location.origin}/auth/callback`;
+  const destination = redirectTo || `${window.location.origin}/workspace`;
 
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'google',

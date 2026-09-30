@@ -384,34 +384,3 @@ export async function getCurrentUserProfile(): Promise<UserProfile | null> {
   }
 }
 
-export async function submitOnboarding(payload: {
-  full_name: string;
-  organization: string;
-  designation: string;
-  country: string;
-  role: 'researcher' | 'public';
-  research_domain?: string;
-  affiliation?: string;
-  explorer_interest?: string;
-}): Promise<UserProfile> {
-  const res = await fetch(`${API_BASE}/api/auth/onboarding`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...getAuthHeader()
-    },
-    body: JSON.stringify(payload)
-  });
-
-  if (!res.ok) {
-    const errJson = await res.json().catch(() => ({}));
-    throw new Error(errJson?.error?.message || `Failed to complete onboarding (${res.status})`);
-  }
-
-  const json = await res.json();
-  if (json.success && json.data) {
-    return json.data;
-  }
-  throw new Error(json.error?.message || 'Failed to complete onboarding');
-}
-

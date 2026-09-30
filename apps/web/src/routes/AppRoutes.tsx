@@ -21,8 +21,6 @@ import { PublicKnowledgeDetailPage } from '../pages/public/PublicKnowledgeDetail
 // Auth Pages
 import { LoginPage } from '../pages/auth/LoginPage';
 import { SignupPage } from '../pages/auth/SignupPage';
-import { OnboardingPage } from '../pages/auth/OnboardingPage';
-import { AuthCallbackPage } from '../pages/auth/AuthCallbackPage';
 
 // Workspace Pages
 import { DashboardPage } from '../pages/workspace/DashboardPage';
@@ -53,8 +51,6 @@ export function AppRoutes() {
       <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/signup" element={<SignupPage />} />
-      <Route path="/onboarding" element={<OnboardingPage />} />
-      <Route path="/auth/callback" element={<AuthCallbackPage />} />
 
       {/* Public Discovery Portal (rendered in AppShell with Public Sidebar) */}
       <Route path="/explore" element={<AppShell />}>

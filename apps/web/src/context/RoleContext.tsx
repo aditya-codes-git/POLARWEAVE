@@ -21,7 +21,6 @@ export interface UserProfile {
   research_domain?: string;
   affiliation?: string;
   explorer_interest?: string;
-  onboarding_completed?: boolean;
 }
 
 export const DEMO_PROFILES: Record<UserRole, UserProfile> = {
@@ -33,8 +32,7 @@ export const DEMO_PROFILES: Record<UserRole, UserProfile> = {
     roleLabel: 'Researcher',
     roleTitle: 'Scientific Contributor',
     institution: 'National Centre for Polar and Ocean Research (NCPOR)',
-    badgeLabel: 'RESEARCHER',
-    onboarding_completed: true
+    badgeLabel: 'RESEARCHER'
   },
   admin: {
     id: 'usr_admin_bose',
@@ -44,8 +42,7 @@ export const DEMO_PROFILES: Record<UserRole, UserProfile> = {
     roleLabel: 'Knowledge Admin',
     roleTitle: 'NCPOR Knowledge Management',
     institution: 'Ministry of Earth Sciences (MoES)',
-    badgeLabel: 'KNOWLEDGE ADMIN',
-    onboarding_completed: true
+    badgeLabel: 'KNOWLEDGE ADMIN'
   },
   public: {
     id: 'usr_public_explorer',
@@ -55,8 +52,7 @@ export const DEMO_PROFILES: Record<UserRole, UserProfile> = {
     roleLabel: 'Public Explorer',
     roleTitle: 'Student / Educator',
     institution: 'Public Science Community',
-    badgeLabel: 'PUBLIC EXPLORER',
-    onboarding_completed: true
+    badgeLabel: 'PUBLIC EXPLORER'
   }
 };
 
@@ -68,7 +64,6 @@ interface RoleContextType {
   switchRole: (newRole: UserRole) => void;
   canAccess: (allowedRoles: UserRole[]) => boolean;
   signOutUser: () => Promise<void>;
-  completeOnboarding: (savedProfile: any, role: 'researcher' | 'public') => Promise<void>;
 }
 
 const RoleContext = createContext<RoleContextType | undefined>(undefined);
@@ -141,34 +136,15 @@ export function RoleProvider({ children }: { children: ReactNode }) {
     const avatar = meta.avatar_url || meta.picture;
     const isAdm = email.toLowerCase().includes('admin') || meta.role === 'admin';
     const initialRole: UserRole = isAdm ? 'admin' : 'researcher';
-
-    let onboardingCompleted = isAdm; // Admin accounts skip onboarding by default
     let resolvedRole: UserRole = initialRole;
     let institution = meta.institution || 'National Centre for Polar and Ocean Research (NCPOR)';
     let designation = '';
     let country = '';
 
-    // Check if onboarding is already completed from local customUser or stored polarweave_user
-    const localUser = customUser || getInitialCustomUser();
-    if (localUser?.onboarding_completed) {
-      onboardingCompleted = true;
-      if (localUser.role && localUser.role !== 'admin') {
-        resolvedRole = localUser.role;
-      }
-      if (localUser.institution || localUser.organization) {
-        institution = localUser.organization || localUser.institution;
-      }
-      if (localUser.designation) designation = localUser.designation;
-      if (localUser.country) country = localUser.country;
-    }
-
-    // Check backend persisted profile
+    // Check backend persisted profile if available
     try {
       const backendProfile = await getCurrentUserProfile();
       if (backendProfile) {
-        if (backendProfile.onboarding_completed) {
-          onboardingCompleted = true;
-        }
         if (backendProfile.role && backendProfile.role !== 'admin') {
           resolvedRole = backendProfile.role as UserRole;
         }
@@ -212,8 +188,7 @@ export function RoleProvider({ children }: { children: ReactNode }) {
           : resolvedRole === 'public'
           ? 'PUBLIC EXPLORER'
           : 'RESEARCHER',
-      avatar_url: avatar,
-      onboarding_completed: onboardingCompleted
+      avatar_url: avatar
     };
 
     setCustomUser(profile);
@@ -225,51 +200,6 @@ export function RoleProvider({ children }: { children: ReactNode }) {
       localStorage.setItem('polarweave_demo_role', resolvedRole);
     } catch (e) {
       console.warn('[POLARWEAVE] Storage sync exception:', e);
-    }
-
-    // Routing check:
-    // Only route if not currently on /auth/callback (which performs dedicated resolution)
-    if (window.location.pathname !== '/auth/callback') {
-      if (!onboardingCompleted && !isAdm) {
-        if (window.location.pathname !== '/onboarding') {
-          navigate('/onboarding', { replace: true });
-        }
-      } else if (onboardingCompleted && window.location.pathname === '/onboarding') {
-        const target = resolvedRole === 'public' ? '/explore' : '/workspace';
-        navigate(target, { replace: true });
-      }
-    }
-  };
-
-  const completeOnboarding = async (savedProfile: any, newRole: 'researcher' | 'public') => {
-    const updatedProfile: UserProfile = {
-      id: savedProfile.id || savedProfile.user_id || customUser?.id || 'usr_google_user',
-      name: savedProfile.full_name || customUser?.name || 'Researcher',
-      email: savedProfile.email || customUser?.email || '',
-      role: newRole,
-      roleLabel: newRole === 'researcher' ? 'Researcher' : 'Public Explorer',
-      roleTitle: newRole === 'researcher' ? 'Scientific Contributor' : 'Public Discovery',
-      institution: savedProfile.organization || customUser?.institution || '',
-      designation: savedProfile.designation || '',
-      country: savedProfile.country || '',
-      badgeLabel: newRole === 'researcher' ? 'RESEARCHER' : 'PUBLIC EXPLORER',
-      avatar_url: customUser?.avatar_url,
-      organization: savedProfile.organization,
-      research_domain: savedProfile.research_domain,
-      affiliation: savedProfile.affiliation,
-      explorer_interest: savedProfile.explorer_interest,
-      onboarding_completed: true
-    };
-
-    setCustomUser(updatedProfile);
-    setRoleState(newRole);
-
-    try {
-      localStorage.setItem(STORAGE_KEY, newRole);
-      localStorage.setItem('polarweave_user', JSON.stringify(updatedProfile));
-      localStorage.setItem('polarweave_demo_role', newRole);
-    } catch (e) {
-      console.warn('[POLARWEAVE] Failed to save updated profile to localStorage:', e);
     }
   };
 
@@ -333,7 +263,7 @@ export function RoleProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <RoleContext.Provider value={{ role, user, switchRole, canAccess, signOutUser, completeOnboarding }}>
+    <RoleContext.Provider value={{ role, user, switchRole, canAccess, signOutUser }}>
       {children}
     </RoleContext.Provider>
   );
