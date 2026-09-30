@@ -18,7 +18,7 @@ export async function callGroqChat(
     throw new Error('GROQ_API_KEY is not configured');
   }
 
-  const model = options?.model || 'llama-3.3-70b-versatile';
+  const model = options?.model || 'llama-3.1-8b-instant';
   const temperature = options?.temperature ?? 0.2;
   const jsonMode = options?.jsonMode ?? false;
 

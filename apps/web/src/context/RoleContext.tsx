@@ -178,11 +178,11 @@ export function RoleProvider({ children }: { children: ReactNode }) {
     } else if (newRole === 'researcher') {
       if (currentPath.startsWith('/workspace/admin')) {
         navigate('/workspace', { replace: true });
-      } else if (currentPath === '/explore' || currentPath === '/') {
+      } else if (currentPath.startsWith('/explore') || currentPath === '/') {
         navigate('/workspace', { replace: true });
       }
     } else if (newRole === 'admin') {
-      if (currentPath === '/explore' || currentPath === '/') {
+      if (currentPath.startsWith('/explore') || currentPath === '/') {
         navigate('/workspace', { replace: true });
       }
     }

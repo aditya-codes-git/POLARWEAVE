@@ -20,7 +20,8 @@ import {
   DEMO_JOBS
 } from '../data/demoData';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const envObj = (typeof import.meta !== 'undefined' && (import.meta as any).env) ? (import.meta as any).env : (typeof process !== 'undefined' && process.env) ? process.env : {};
+const API_BASE = envObj.VITE_API_URL || 'http://localhost:5000';
 
 async function safeFetch<T>(endpoint: string, options?: RequestInit): Promise<T> {
   try {

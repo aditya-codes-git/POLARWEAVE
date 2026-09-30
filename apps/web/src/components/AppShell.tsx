@@ -30,12 +30,52 @@ export function AppShell() {
 
   const navigationSections = getNavigationForRole(role);
 
-  // Derive breadcrumbs from path
+  // Derive breadcrumbs and contextual title
   const pathParts = location.pathname.split('/').filter(Boolean);
-  const breadcrumbs = pathParts.map((p, idx) => ({
-    label: p.charAt(0).toUpperCase() + p.slice(1).replace('-', ' '),
-    path: '/' + pathParts.slice(0, idx + 1).join('/')
-  }));
+
+  const PUBLIC_LABEL_MAP: Record<string, string> = {
+    explore: 'Explore',
+    knowledge: 'Knowledge',
+    expeditions: 'Expeditions',
+    research: 'Research',
+    media: 'Media',
+    explainers: 'Science Explainers',
+    topics: 'Topics',
+    evidence: 'Explore Evidence',
+    'knowledge-graph': 'Knowledge Graph',
+    graph: 'Knowledge Graph',
+    search: 'Global Search'
+  };
+
+  const breadcrumbs: { label: string; path: string }[] = [];
+
+  if (role === 'public' || location.pathname.startsWith('/explore')) {
+    breadcrumbs.push({ label: 'Public Portal', path: '/explore' });
+
+    if (pathParts.length === 1 && pathParts[0] === 'explore') {
+      breadcrumbs.push({ label: 'Explore', path: '/explore' });
+    } else {
+      pathParts.forEach((part, idx) => {
+        if (part === 'explore') return;
+        const mapped =
+          PUBLIC_LABEL_MAP[part] ||
+          (part.length > 15 ? 'Record Dossier' : part.charAt(0).toUpperCase() + part.slice(1).replace('-', ' '));
+        breadcrumbs.push({
+          label: mapped,
+          path: '/' + pathParts.slice(0, idx + 1).join('/')
+        });
+      });
+    }
+  } else {
+    breadcrumbs.push({ label: 'Workspace', path: '/workspace' });
+    pathParts.forEach((p, idx) => {
+      if (p === 'workspace') return;
+      breadcrumbs.push({
+        label: p.charAt(0).toUpperCase() + p.slice(1).replace('-', ' '),
+        path: '/' + pathParts.slice(0, idx + 1).join('/')
+      });
+    });
+  }
 
   const handleRoleSelect = (targetRole: UserRole) => {
     switchRole(targetRole);
@@ -219,21 +259,21 @@ export function AppShell() {
               <Menu className="w-4 h-4" />
             </button>
 
-            <span className="font-semibold text-slate-800">
-              {role === 'public' ? 'Public Portal' : 'Workspace'}
-            </span>
-            {breadcrumbs.slice(1).map((b, i) => (
-              <React.Fragment key={b.path}>
-                <ChevronRight className="w-3.5 h-3.5 text-slate-300" />
-                <span
+            {breadcrumbs.map((b, i) => (
+              <React.Fragment key={b.path + i}>
+                {i > 0 && <ChevronRight className="w-3.5 h-3.5 text-slate-300" />}
+                <NavLink
+                  to={b.path}
                   className={
-                    i === breadcrumbs.length - 2
-                      ? 'font-medium text-slate-900 hidden sm:inline'
-                      : 'hidden sm:inline text-slate-500'
+                    i === breadcrumbs.length - 1
+                      ? 'font-bold text-slate-900 truncate max-w-[220px]'
+                      : i === 0
+                      ? 'font-semibold text-slate-700 hover:text-slate-900'
+                      : 'hidden sm:inline text-slate-500 hover:text-slate-800 truncate max-w-[160px]'
                   }
                 >
                   {b.label}
-                </span>
+                </NavLink>
               </React.Fragment>
             ))}
           </div>
@@ -243,20 +283,26 @@ export function AppShell() {
             {/* Ask the Evidence Button */}
             <button
               onClick={() => setIsAskModalOpen(true)}
-              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-polar-50 hover:bg-polar-100 text-polar-800 border border-polar-200 text-xs font-medium transition-all shadow-subtle"
+              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-polar-50 hover:bg-polar-100 text-polar-800 border border-polar-200 text-xs font-medium transition-all shadow-subtle cursor-pointer"
             >
               <Sparkles className="w-3.5 h-3.5 text-polar-600" />
               <span className="hidden sm:inline">Ask the Evidence</span>
               <span className="sm:hidden">Ask</span>
             </button>
 
-            {/* Command Palette Trigger */}
+            {/* Command Palette / Search Trigger */}
             <button
-              onClick={() => setIsCommandOpen(true)}
-              className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-500 hover:text-slate-900 hover:bg-slate-50 transition-colors shadow-subtle"
+              onClick={() => {
+                if (role === 'public') {
+                  navigate('/explore/search');
+                } else {
+                  setIsCommandOpen(true);
+                }
+              }}
+              className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-500 hover:text-slate-900 hover:bg-slate-50 transition-colors shadow-subtle cursor-pointer"
             >
               <Search className="w-3.5 h-3.5 text-slate-400" />
-              <span>Search...</span>
+              <span>Search {role === 'public' ? 'Polar Knowledge...' : '...'}</span>
               <kbd className="px-1 py-0.5 rounded bg-slate-100 border border-slate-200 text-[10px] font-mono text-slate-500">
                 ⌘K
               </kbd>

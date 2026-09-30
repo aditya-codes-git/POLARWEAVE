@@ -6,6 +6,17 @@ import { ProtectedRoute } from '../components/ProtectedRoute';
 // Public Pages
 import { LandingPage } from '../pages/public/LandingPage';
 import { ExplorePage } from '../pages/public/ExplorePage';
+import { PublicKnowledgePage } from '../pages/public/PublicKnowledgePage';
+import { PublicExpeditionsPage } from '../pages/public/PublicExpeditionsPage';
+import { PublicResearchPage } from '../pages/public/PublicResearchPage';
+import { PublicMediaPage } from '../pages/public/PublicMediaPage';
+import { PublicExplainersPage } from '../pages/public/PublicExplainersPage';
+import { PublicTopicsPage } from '../pages/public/PublicTopicsPage';
+import { PublicEvidencePage } from '../pages/public/PublicEvidencePage';
+import { PublicKnowledgeGraphPage } from '../pages/public/PublicKnowledgeGraphPage';
+import { PublicSearchPage } from '../pages/public/PublicSearchPage';
+import { PublicExpeditionDetailPage } from '../pages/public/PublicExpeditionDetailPage';
+import { PublicKnowledgeDetailPage } from '../pages/public/PublicKnowledgeDetailPage';
 
 // Auth Pages
 import { LoginPage } from '../pages/auth/LoginPage';
@@ -44,21 +55,39 @@ export function AppRoutes() {
       {/* Public Discovery Portal (rendered in AppShell with Public Sidebar) */}
       <Route path="/explore" element={<AppShell />}>
         <Route index element={<ExplorePage />} />
-        <Route path="knowledge" element={<ExplorePage />} />
-        <Route path="expeditions" element={<ExplorePage />} />
-        <Route path="research" element={<ExplorePage />} />
-        <Route path="media" element={<ExplorePage />} />
-        <Route path="explainers" element={<ExplorePage />} />
-        <Route path="topics" element={<ExplorePage />} />
-        <Route path="evidence" element={<ExplorePage />} />
-        <Route path="graph" element={<ExplorePage />} />
-        <Route path="search" element={<ExplorePage />} />
+        <Route path="knowledge" element={<PublicKnowledgePage />} />
+        <Route path="knowledge/:id" element={<PublicKnowledgeDetailPage />} />
+        <Route path="expeditions" element={<PublicExpeditionsPage />} />
+        <Route path="expeditions/:id" element={<PublicExpeditionDetailPage />} />
+        <Route path="research" element={<PublicResearchPage />} />
+        <Route path="research/:id" element={<PublicResearchPage />} />
+        <Route path="media" element={<PublicMediaPage />} />
+        <Route path="media/:id" element={<PublicMediaPage />} />
+        <Route path="explainers" element={<PublicExplainersPage />} />
+        <Route path="explainers/:id" element={<PublicExplainersPage />} />
+        <Route path="topics" element={<PublicTopicsPage />} />
+        <Route path="topics/:id" element={<PublicTopicsPage />} />
+        <Route path="evidence" element={<PublicEvidencePage />} />
+        <Route path="knowledge-graph" element={<PublicKnowledgeGraphPage />} />
+        <Route path="graph" element={<Navigate to="/explore/knowledge-graph" replace />} />
+        <Route path="search" element={<PublicSearchPage />} />
       </Route>
 
-      {/* Public route aliases redirect to /explore/* */}
+      {/* Public route aliases redirect to canonical public views */}
       <Route path="/expeditions" element={<Navigate to="/explore/expeditions" replace />} />
+      <Route path="/expeditions/:id" element={<AppShell />}>
+        <Route index element={<PublicExpeditionDetailPage />} />
+      </Route>
+      <Route path="/knowledge" element={<Navigate to="/explore/knowledge" replace />} />
+      <Route path="/knowledge/:id" element={<AppShell />}>
+        <Route index element={<PublicKnowledgeDetailPage />} />
+      </Route>
       <Route path="/research" element={<Navigate to="/explore/research" replace />} />
       <Route path="/media" element={<Navigate to="/explore/media" replace />} />
+      <Route path="/explainers" element={<Navigate to="/explore/explainers" replace />} />
+      <Route path="/topics" element={<Navigate to="/explore/topics" replace />} />
+      <Route path="/evidence" element={<Navigate to="/explore/evidence" replace />} />
+      <Route path="/search" element={<Navigate to="/explore/search" replace />} />
 
       {/* 2. PROTECTED WORKSPACE ROUTES (Researcher & Admin only) */}
       <Route

@@ -108,7 +108,7 @@ export const publicNavigation: NavigationSection[] = [
     title: 'EVIDENCE',
     items: [
       { id: 'explore-evidence', label: 'Explore Evidence', to: '/explore/evidence', icon: Shield, highlight: true },
-      { id: 'explore-graph', label: 'Knowledge Graph', to: '/explore/graph', icon: Compass }
+      { id: 'explore-graph', label: 'Knowledge Graph', to: '/explore/knowledge-graph', icon: Compass }
     ]
   },
   {
