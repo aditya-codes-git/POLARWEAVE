@@ -215,6 +215,78 @@ export async function processFiles(req: Request, res: Response) {
         } catch (structErr: any) {
           console.warn(`[POLARWEAVE Ingest] Structuring error for ${f.originalname}:`, structErr?.message);
         }
+      } else if (ext === 'txt' || ext === 'text' || ext === 'md') {
+        const docId = `doc_${uuidv4().slice(0, 8)}`;
+        const textContent = f.buffer.toString('utf-8');
+        const doc: PolarDocument = {
+          id: docId,
+          filename: f.originalname,
+          storage_path: storagePath,
+          mime_type: f.mimetype || 'text/plain',
+          size_bytes: f.size,
+          document_type: 'field_notes',
+          processing_status: 'completed',
+          processing_job_id: jobId,
+          page_count: 1,
+          metadata_json: { title: f.originalname },
+          created_at: new Date().toISOString()
+        };
+
+        const chunks = [{
+          page_number: 1,
+          section: 'Section 1',
+          content: textContent,
+          token_count: Math.ceil(textContent.length / 4)
+        }];
+
+        await createDocument(doc, chunks);
+        processedDocuments.push(doc);
+
+        try {
+          const structuring = await structureScientificDocument(f.originalname, textContent, [{ pageNumber: 1, text: textContent }]);
+          for (const ob of structuring.observations) {
+            const obsId = `obs_${uuidv4().slice(0, 8)}`;
+            const newObs: Observation = {
+              id: obsId,
+              expedition_id: undefined,
+              expedition_title: structuring.expedition || undefined,
+              title: ob.title,
+              description: ob.description,
+              research_domain: ob.research_domain,
+              observed_at: ob.observed_at || new Date().toISOString(),
+              location_name: ob.location || 'Unspecified Location',
+              confidence: ob.confidence,
+              confidence_level: ob.confidence > 0.85 ? 'HIGH' : ob.confidence > 0.6 ? 'MEDIUM' : 'LOW',
+              verification_status: 'NEEDS_REVIEW',
+              processing_job_id: jobId,
+              source_file_id: docId,
+              source_file_name: f.originalname,
+              excerpt: ob.excerpt || textContent.slice(0, 200),
+              page_number: 1,
+              created_at: new Date().toISOString(),
+              created_by: req.user?.id || 'usr_researcher_sharma',
+              created_by_name: req.user?.name || 'Dr. Rajesh Sharma',
+              demo: false
+            };
+
+            await createObservation(newObs);
+            newlyCreatedObs.push(newObs);
+
+            if (ob.measurements && ob.measurements.length > 0) {
+              const msrs = ob.measurements.map((m) => ({
+                id: `msr_${uuidv4().slice(0, 8)}`,
+                observation_id: obsId,
+                variable: m.variable,
+                value: m.value,
+                unit: m.unit || '',
+                confidence: ob.confidence
+              }));
+              await createMeasurements(msrs);
+            }
+          }
+        } catch (structErr: any) {
+          console.warn(`[POLARWEAVE Ingest] Structuring error for ${f.originalname}:`, structErr?.message);
+        }
       } else if (ext === 'docx') {
         const docId = `doc_${uuidv4().slice(0, 8)}`;
         try {

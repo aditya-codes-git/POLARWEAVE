@@ -67,14 +67,21 @@ async function safeFetch<T>(endpoint: string, options?: RequestInit): Promise<T>
         ...(options?.headers || {})
       }
     });
-    if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      const message = errBody?.error?.message || `HTTP ${res.status} ${res.statusText}`;
+      const error = new Error(message);
+      (error as any).status = res.status;
+      (error as any).code = errBody?.error?.code || 'FETCH_ERROR';
+      throw error;
+    }
     const json: ApiResponse<T> = await res.json();
     if (json.success && json.data !== undefined) {
       return json.data;
     }
     throw new Error(json.error?.message || 'API request failed');
   } catch (err) {
-    console.warn(`[POLARWEAVE Client] Endpoint ${endpoint} unreachable or error; utilizing resilient demo state.`, err);
+    console.error(`[POLARWEAVE Client] API request failed for ${endpoint}:`, err);
     throw err;
   }
 }
@@ -135,8 +142,8 @@ export async function getEvidenceTrace(knowledgeId: string): Promise<EvidenceTra
     return {
       knowledge_id: knowledgeId,
       knowledge_title: 'Evidence Trace',
-      confidence: 0.9,
-      verification_status: 'AI_EXTRACTED',
+      confidence: 0,
+      verification_status: 'UNVERIFIED',
       total_sources: 0,
       evidence_chain: [],
       grouped_sources: {

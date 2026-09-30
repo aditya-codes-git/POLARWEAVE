@@ -137,7 +137,7 @@ export function ReviewDetailPage() {
       {/* Top Navigation & Status */}
       <div className="flex items-center justify-between">
         <button
-          onClick={() => navigate('/workspace/review')}
+          onClick={() => navigate(obs.processing_job_id ? `/workspace/review?jobId=${obs.processing_job_id}` : '/workspace/review')}
           className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600 hover:text-slate-900 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -175,217 +175,248 @@ export function ReviewDetailPage() {
         </div>
       )}
 
-      {/* 3-COLUMN REVIEW WORKSPACE */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* COLUMN 1: SOURCE MATERIAL (4 cols) */}
-        <div className="lg:col-span-4 bg-white border border-slate-200 rounded-2xl p-5 shadow-subtle space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-            <div>
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                1. Source Material
-              </h2>
-              <p className="text-xs text-slate-800 font-medium">
-                Uploaded source evidence
-              </p>
-            </div>
-            <span className="text-[10px] font-mono text-slate-400">PROVENANCE</span>
+      {/* WORKSPACE LAYOUT: 70% MAIN CONTENT + 30% STICKY REVIEW DECISION PANEL */}
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
+        {/* LEFT / MAIN SECTION: ~70% WIDTH */}
+        <div className="w-full lg:w-[68%] xl:w-[70%] space-y-6">
+          {/* FLOW HEADER BANNER */}
+          <div className="flex items-center gap-2 text-xs font-mono text-slate-500 bg-slate-50 border border-slate-200/80 px-4 py-2 rounded-xl">
+            <span className="font-semibold text-slate-800">SOURCE MATERIAL</span>
+            <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+            <span className="font-semibold text-polar-700">EXTRACTED KNOWLEDGE</span>
+            <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+            <span className="font-semibold text-purple-700">{isAdmin ? 'ADMIN VERIFICATION' : 'AUTHOR STATUS'}</span>
           </div>
 
-          {/* Render authentic evidence links if present */}
-          {evidenceList.length > 0 ? (
-            evidenceList.map((evi) => (
-              <div key={evi.id} className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-slate-900 flex items-center gap-1.5">
-                    {evi.source_type === 'pdf' || evi.source_type === 'docx' ? (
-                      <FileText className="w-4 h-4 text-rose-600 shrink-0" />
-                    ) : evi.source_type === 'dataset' ? (
-                      <Database className="w-4 h-4 text-emerald-600 shrink-0" />
-                    ) : evi.source_type === 'video' ? (
-                      <Film className="w-4 h-4 text-blue-600 shrink-0" />
-                    ) : (
-                      <ImageIcon className="w-4 h-4 text-purple-600 shrink-0" />
-                    )}
-                    <span className="truncate max-w-[200px]" title={evi.source_title}>
-                      {evi.source_title}
-                    </span>
-                  </span>
-                  {evi.page_number && (
-                    <span className="text-[10px] font-mono bg-white px-1.5 py-0.5 rounded border border-slate-200 text-slate-600 shrink-0">
-                      Page {evi.page_number}
-                    </span>
-                  )}
-                  {evi.row_number && (
-                    <span className="text-[10px] font-mono bg-white px-1.5 py-0.5 rounded border border-slate-200 text-slate-600 shrink-0">
-                      Row {evi.row_number}
-                    </span>
-                  )}
-                </div>
-
-                <div className="text-xs font-mono text-slate-700 bg-white p-2.5 rounded-lg border border-slate-200/60 leading-relaxed break-words">
-                  "{evi.excerpt}"
-                </div>
-
-                {evi.media_url && (
-                  <div className="mt-2 rounded-lg overflow-hidden border border-slate-200 max-h-48 bg-slate-900 flex items-center justify-center">
-                    <img src={evi.media_url} alt={evi.source_title} className="object-contain max-h-48 w-full" />
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
+            {/* 1. SOURCE MATERIAL: ~40% OF MAIN (5 cols out of 12 = 41.7%) */}
+            <div className="md:col-span-5 bg-white border border-slate-200 rounded-2xl p-5 shadow-subtle space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-slate-400"></span>
+                    <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                      1. Source Material
+                    </h2>
                   </div>
-                )}
-              </div>
-            ))
-          ) : (
-            /* Fallback to observation's own source provenance */
-            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-slate-900 flex items-center gap-1.5">
-                  <FileText className="w-4 h-4 text-rose-600 shrink-0" />
-                  <span className="truncate max-w-[200px]">
-                    {obs.source_file_name || (obs.source_file_id ? `Source: ${obs.source_file_id}` : 'Direct Upload')}
-                  </span>
-                </span>
-                {obs.page_number && (
-                  <span className="text-[10px] font-mono bg-white px-1.5 py-0.5 rounded border border-slate-200 text-slate-600 shrink-0">
-                    Page {obs.page_number}
-                  </span>
-                )}
-              </div>
-              <div className="text-xs font-mono text-slate-700 bg-white p-2.5 rounded-lg border border-slate-200/60 leading-relaxed">
-                "{obs.excerpt || obs.description}"
-              </div>
-            </div>
-          )}
-
-          {obs.processing_job_id && (
-            <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-100 text-[11px] font-mono text-slate-500 flex items-center justify-between">
-              <span>Job ID:</span>
-              <span className="text-slate-800 font-semibold">{obs.processing_job_id}</span>
-            </div>
-          )}
-        </div>
-
-        {/* COLUMN 2: STRUCTURED KNOWLEDGE (5 cols) */}
-        <div className="lg:col-span-5 bg-white border border-slate-200 rounded-2xl p-6 shadow-subtle space-y-5">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-            <div>
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                2. Extracted Knowledge
-              </h2>
-              <p className="text-xs text-slate-800 font-medium">
-                Structured scientific record
-              </p>
-            </div>
-            <ConfidenceBadge confidence={obs.confidence} />
-          </div>
-
-          {isEditing ? (
-            <div className="space-y-4">
-              <div>
-                <label className="text-xs font-medium text-slate-700 block mb-1">
-                  Observation Title
-                </label>
-                <input
-                  type="text"
-                  value={editedTitle}
-                  onChange={(e) => setEditedTitle(e.target.value)}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-slate-700 block mb-1">
-                  Scientific Description
-                </label>
-                <textarea
-                  rows={4}
-                  value={editedDesc}
-                  onChange={(e) => setEditedDesc(e.target.value)}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs"
-                />
-              </div>
-              <div className="flex justify-end gap-2">
-                <button
-                  onClick={() => setIsEditing(false)}
-                  className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-medium"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleSaveEdit}
-                  className="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-xs font-medium"
-                >
-                  Save Changes
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <DomainBadge domain={obs.research_domain} />
-                  <span className="text-xs text-slate-400">•</span>
-                  <span className="text-xs text-slate-500 font-mono">
-                    {obs.location_name || 'Unspecified Location'}
-                  </span>
-                </div>
-                <h3 className="text-base font-bold text-slate-900 leading-snug">
-                  {obs.title}
-                </h3>
-              </div>
-
-              <div className="text-xs text-slate-600 leading-relaxed bg-slate-50/70 p-3.5 rounded-xl border border-slate-100">
-                {obs.description}
-              </div>
-
-              {/* Extracted Calibration Variables (Dynamic) */}
-              <div className="pt-2">
-                <span className="text-xs font-semibold text-slate-900 block mb-2">
-                  Calibrated Measurements
-                </span>
-                {obs.measurements && obs.measurements.length > 0 ? (
-                  <div className="grid grid-cols-2 gap-2">
-                    {obs.measurements.map((m, idx) => (
-                      <div key={idx} className="p-2.5 rounded-lg bg-slate-50 border border-slate-100">
-                        <span className="text-[10px] font-mono uppercase text-slate-400 block">
-                          {m.variable?.replace(/_/g, ' ') || 'Metric'}
-                        </span>
-                        <span className="text-sm font-bold text-slate-900 font-mono">
-                          {m.value} {m.unit}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-xs text-slate-400 italic bg-slate-50 p-2.5 rounded-lg border border-slate-100">
-                    No quantitative measurements extracted from this source material.
+                  <p className="text-xs text-slate-800 font-medium mt-0.5">
+                    Uploaded source evidence
                   </p>
+                </div>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-semibold">
+                  PROVENANCE
+                </span>
+              </div>
+
+              {/* Render authentic evidence links if present */}
+              {evidenceList.length > 0 ? (
+                evidenceList.map((evi) => (
+                  <div key={evi.id} className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-2.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="text-xs font-semibold text-slate-900 flex items-center gap-1.5 min-w-0">
+                        {evi.source_type === 'pdf' || evi.source_type === 'docx' ? (
+                          <FileText className="w-4 h-4 text-rose-600 shrink-0" />
+                        ) : evi.source_type === 'dataset' ? (
+                          <Database className="w-4 h-4 text-emerald-600 shrink-0" />
+                        ) : evi.source_type === 'video' ? (
+                          <Film className="w-4 h-4 text-blue-600 shrink-0" />
+                        ) : (
+                          <ImageIcon className="w-4 h-4 text-purple-600 shrink-0" />
+                        )}
+                        <span className="truncate" title={evi.source_title}>
+                          {evi.source_title}
+                        </span>
+                      </span>
+                      {evi.page_number && (
+                        <span className="text-[10px] font-mono bg-white px-2 py-0.5 rounded border border-slate-200 text-slate-700 font-medium shrink-0">
+                          p. {evi.page_number}
+                        </span>
+                      )}
+                      {evi.row_number && (
+                        <span className="text-[10px] font-mono bg-white px-2 py-0.5 rounded border border-slate-200 text-slate-700 font-medium shrink-0">
+                          row {evi.row_number}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="text-xs font-mono text-slate-700 bg-white p-3 rounded-lg border border-slate-200/70 leading-relaxed break-words shadow-2xs">
+                      "{evi.excerpt}"
+                    </div>
+
+                    {evi.media_url && (
+                      <div className="mt-2 rounded-lg overflow-hidden border border-slate-200 max-h-56 bg-slate-900 flex items-center justify-center">
+                        <img src={evi.media_url} alt={evi.source_title} className="object-contain max-h-56 w-full" />
+                      </div>
+                    )}
+                  </div>
+                ))
+              ) : (
+                /* Fallback to observation's own source provenance */
+                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-2.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="text-xs font-semibold text-slate-900 flex items-center gap-1.5 min-w-0">
+                      <FileText className="w-4 h-4 text-rose-600 shrink-0" />
+                      <span className="truncate" title={obs.source_file_name || obs.source_file_id || 'Direct Upload'}>
+                        {obs.source_file_name || (obs.source_file_id ? `Source: ${obs.source_file_id}` : 'Direct Upload')}
+                      </span>
+                    </span>
+                    {obs.page_number && (
+                      <span className="text-[10px] font-mono bg-white px-2 py-0.5 rounded border border-slate-200 text-slate-700 font-medium shrink-0">
+                        p. {obs.page_number}
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-xs font-mono text-slate-700 bg-white p-3 rounded-lg border border-slate-200/70 leading-relaxed break-words shadow-2xs">
+                    "{obs.excerpt || obs.description}"
+                  </div>
+                </div>
+              )}
+
+              {/* Provenance Metadata Details */}
+              <div className="pt-2 border-t border-slate-100 space-y-2 text-xs">
+                {obs.processing_job_id && (
+                  <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-100 text-[11px] font-mono text-slate-500 flex items-center justify-between">
+                    <span className="text-slate-400">Processing Job:</span>
+                    <span className="text-slate-800 font-semibold">{obs.processing_job_id}</span>
+                  </div>
+                )}
+                {obs.expedition_title && (
+                  <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-100 text-[11px] text-slate-500 flex items-center justify-between">
+                    <span className="text-slate-400">Expedition:</span>
+                    <span className="text-slate-800 font-medium truncate max-w-[150px]">{obs.expedition_title}</span>
+                  </div>
                 )}
               </div>
             </div>
-          )}
+
+            {/* 2. EXTRACTED KNOWLEDGE: ~60% OF MAIN (7 cols out of 12 = 58.3%) */}
+            <div className="md:col-span-7 bg-white border border-slate-200 rounded-2xl p-6 shadow-subtle space-y-5">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-polar-500"></span>
+                    <h2 className="text-xs font-semibold uppercase tracking-wider text-polar-700">
+                      2. Extracted Knowledge
+                    </h2>
+                  </div>
+                  <p className="text-xs text-slate-800 font-medium mt-0.5">
+                    Structured scientific finding
+                  </p>
+                </div>
+                <ConfidenceBadge confidence={obs.confidence} />
+              </div>
+
+              {isEditing ? (
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-xs font-medium text-slate-700 block mb-1">
+                      Observation Title
+                    </label>
+                    <input
+                      type="text"
+                      value={editedTitle}
+                      onChange={(e) => setEditedTitle(e.target.value)}
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-polar-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-slate-700 block mb-1">
+                      Scientific Description
+                    </label>
+                    <textarea
+                      rows={4}
+                      value={editedDesc}
+                      onChange={(e) => setEditedDesc(e.target.value)}
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-polar-500"
+                    />
+                  </div>
+                  <div className="flex justify-end gap-2 pt-2">
+                    <button
+                      onClick={() => setIsEditing(false)}
+                      className="px-3.5 py-1.5 rounded-lg border border-slate-200 text-xs font-medium hover:bg-slate-50 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleSaveEdit}
+                      className="px-4 py-1.5 rounded-lg bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 transition-colors"
+                    >
+                      Save Changes
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div>
+                    <div className="flex items-center gap-2 mb-2 flex-wrap">
+                      <DomainBadge domain={obs.research_domain} />
+                      <span className="text-xs text-slate-400">•</span>
+                      <span className="text-xs text-slate-500 font-mono">
+                        {obs.location_name || 'Unspecified Location'}
+                      </span>
+                    </div>
+                    <h3 className="text-lg font-bold text-slate-900 leading-snug">
+                      {obs.title}
+                    </h3>
+                  </div>
+
+                  <div className="text-xs text-slate-600 leading-relaxed bg-slate-50/70 p-4 rounded-xl border border-slate-100">
+                    {obs.description}
+                  </div>
+
+                  {/* Extracted Calibration Variables (Dynamic) */}
+                  <div className="pt-2">
+                    <span className="text-xs font-semibold text-slate-900 block mb-2">
+                      Calibrated Measurements & Variables
+                    </span>
+                    {obs.measurements && obs.measurements.length > 0 ? (
+                      <div className="grid grid-cols-2 gap-2.5">
+                        {obs.measurements.map((m, idx) => (
+                          <div key={idx} className="p-3 rounded-xl bg-slate-50 border border-slate-100 shadow-2xs">
+                            <span className="text-[10px] font-mono uppercase text-slate-400 block">
+                              {m.variable?.replace(/_/g, ' ') || 'Metric'}
+                            </span>
+                            <span className="text-sm font-bold text-slate-900 font-mono mt-0.5 block">
+                              {m.value} {m.unit}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-slate-400 italic bg-slate-50 p-3 rounded-xl border border-slate-100">
+                        No quantitative calibrated measurements extracted from this source material.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
-        {/* COLUMN 3: EVIDENCE AUDIT & ACTIONS (3 cols) */}
-        <div className="lg:col-span-3 bg-white border border-slate-200 rounded-2xl p-5 shadow-subtle space-y-5">
+        {/* RIGHT / REVIEW STATUS PANEL: ~30% WIDTH (STICKY WHILE SCROLLING) */}
+        <div className="w-full lg:w-[32%] xl:w-[30%] lg:sticky lg:top-4 bg-white border border-slate-200 rounded-2xl p-5 shadow-subtle space-y-5">
           {isAdmin ? (
             /* ADMIN VIEW: INSTITUTIONAL GOVERNANCE & VERIFICATION */
-            <>
+            <div className="space-y-5">
               <div className="border-b border-slate-100 pb-3">
                 <div className="flex items-center gap-1.5 text-purple-700 font-semibold text-[11px] font-mono uppercase tracking-wider mb-1">
                   <ShieldCheck className="w-3.5 h-3.5" />
                   <span>Institutional Governance</span>
                 </div>
                 <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  3. Verification & Sign-off
+                  3. Review Decision
                 </h2>
                 <p className="text-xs text-slate-800 font-medium">
-                  Authoritative administrative decision
+                  Authoritative administrative sign-off
                 </p>
               </div>
 
               {/* Status & Reviewer Indication */}
               {obs.verification_status === 'VERIFIED' ? (
-                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs space-y-1">
+                <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs space-y-1">
                   <div className="flex items-center gap-1.5 font-semibold text-emerald-800">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                     <span>Status: VERIFIED</span>
                   </div>
                   <p className="text-[11px] text-emerald-700">
@@ -393,9 +424,9 @@ export function ReviewDetailPage() {
                   </p>
                 </div>
               ) : obs.verification_status === 'REJECTED' ? (
-                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs space-y-1">
+                <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-xs space-y-1">
                   <div className="flex items-center gap-1.5 font-semibold text-rose-800">
-                    <XCircle className="w-4 h-4 text-rose-600" />
+                    <XCircle className="w-4 h-4 text-rose-600 shrink-0" />
                     <span>Status: REJECTED</span>
                   </div>
                   <p className="text-[11px] text-rose-700">
@@ -403,9 +434,9 @@ export function ReviewDetailPage() {
                   </p>
                 </div>
               ) : (
-                <div className="p-3 bg-purple-50 border border-purple-200 rounded-xl text-xs space-y-1">
+                <div className="p-3.5 bg-purple-50 border border-purple-200 rounded-xl text-xs space-y-1.5">
                   <div className="flex items-center gap-1.5 font-semibold text-purple-900">
-                    <ShieldCheck className="w-4 h-4 text-purple-700" />
+                    <ShieldCheck className="w-4 h-4 text-purple-700 shrink-0" />
                     <span>Admin Verification Required</span>
                   </div>
                   <p className="text-[11px] text-purple-700 leading-relaxed">
@@ -414,18 +445,19 @@ export function ReviewDetailPage() {
                 </div>
               )}
 
-              <div className="space-y-2 text-xs">
+              {/* Submission Information Table */}
+              <div className="bg-slate-50/80 p-3 rounded-xl border border-slate-100 space-y-2.5 text-xs">
                 <div className="flex items-center justify-between text-slate-600">
                   <span>Current Status:</span>
                   <VerificationBadge status={obs.verification_status} />
                 </div>
                 <div className="flex items-center justify-between text-slate-600">
                   <span>Confidence:</span>
-                  <span className="font-mono text-slate-900">{Math.round(obs.confidence * 100)}%</span>
+                  <span className="font-mono font-semibold text-slate-900">{Math.round(obs.confidence * 100)}%</span>
                 </div>
                 <div className="flex items-center justify-between text-slate-600">
                   <span>Submitter:</span>
-                  <span className="font-medium text-slate-900 truncate max-w-[130px]">
+                  <span className="font-medium text-slate-900 truncate max-w-[130px]" title={obs.created_by_name || 'Dr. Rajesh Sharma'}>
                     {obs.created_by_name || 'Dr. Rajesh Sharma'}
                   </span>
                 </div>
@@ -437,8 +469,8 @@ export function ReviewDetailPage() {
                 </div>
               </div>
 
-              {/* Action Buttons for Admin */}
-              <div className="pt-2 space-y-2">
+              {/* Grouped Actions at Bottom of Panel */}
+              <div className="pt-2 border-t border-slate-100 space-y-2">
                 {obs.verification_status !== 'VERIFIED' && (
                   <button
                     onClick={handleApprove}
@@ -454,7 +486,7 @@ export function ReviewDetailPage() {
                   className="w-full py-2 px-3 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-800 text-xs font-medium shadow-subtle flex items-center justify-center gap-2 transition-all"
                 >
                   <Edit3 className="w-3.5 h-3.5 text-slate-600" />
-                  <span>Edit Metadata</span>
+                  <span>{isEditing ? 'Close Editing' : 'Edit Metadata'}</span>
                 </button>
 
                 {obs.verification_status !== 'REJECTED' && (
@@ -474,10 +506,10 @@ export function ReviewDetailPage() {
                   Approving locks this fact and links it permanently into the Knowledge Graph and Outreach Studio.
                 </p>
               </div>
-            </>
+            </div>
           ) : (
             /* RESEARCHER / CONTRIBUTOR VIEW: AUTHOR PEER STATUS */
-            <>
+            <div className="space-y-5">
               <div className="border-b border-slate-100 pb-3">
                 <div className="flex items-center gap-1.5 text-amber-700 font-semibold text-[11px] font-mono uppercase tracking-wider mb-1">
                   <Clock className="w-3.5 h-3.5" />
@@ -493,9 +525,9 @@ export function ReviewDetailPage() {
 
               {/* Status Banner */}
               {obs.verification_status === 'VERIFIED' ? (
-                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs space-y-1">
+                <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs space-y-1">
                   <div className="flex items-center gap-1.5 font-semibold text-emerald-800">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                     <span>Status: VERIFIED</span>
                   </div>
                   <p className="text-[11px] text-emerald-700 leading-relaxed">
@@ -503,19 +535,19 @@ export function ReviewDetailPage() {
                   </p>
                 </div>
               ) : obs.verification_status === 'REJECTED' ? (
-                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs space-y-1">
+                <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-xs space-y-1">
                   <div className="flex items-center gap-1.5 font-semibold text-rose-800">
-                    <XCircle className="w-4 h-4 text-rose-600" />
+                    <XCircle className="w-4 h-4 text-rose-600 shrink-0" />
                     <span>Status: REJECTED</span>
                   </div>
                   <p className="text-[11px] text-rose-700 leading-relaxed">
-                    Knowledge Admin requested revision or rejected the finding. Edit metadata or consult the reviewer notes.
+                    Knowledge Admin requested revision or rejected the finding. Edit metadata or consult reviewer notes.
                   </p>
                 </div>
               ) : (
                 <div className="p-3.5 bg-amber-50/80 border border-amber-200/80 rounded-xl text-xs space-y-2">
                   <div className="flex items-center gap-1.5 font-semibold text-amber-900">
-                    <Clock className="w-4 h-4 text-amber-600" />
+                    <Clock className="w-4 h-4 text-amber-600 shrink-0" />
                     <span>Awaiting Knowledge Admin Review</span>
                   </div>
                   <p className="text-[11px] text-amber-800 leading-relaxed">
@@ -528,14 +560,15 @@ export function ReviewDetailPage() {
                 </div>
               )}
 
-              <div className="space-y-2 text-xs">
+              {/* Submission Information Table */}
+              <div className="bg-slate-50/80 p-3 rounded-xl border border-slate-100 space-y-2.5 text-xs">
                 <div className="flex items-center justify-between text-slate-600">
                   <span>Current Status:</span>
                   <VerificationBadge status={obs.verification_status} />
                 </div>
                 <div className="flex items-center justify-between text-slate-600">
                   <span>Confidence:</span>
-                  <span className="font-mono text-slate-900">{Math.round(obs.confidence * 100)}%</span>
+                  <span className="font-mono font-semibold text-slate-900">{Math.round(obs.confidence * 100)}%</span>
                 </div>
                 <div className="flex items-center justify-between text-slate-600">
                   <span>Location:</span>
@@ -545,15 +578,15 @@ export function ReviewDetailPage() {
                 </div>
               </div>
 
-              {/* Action Controls for Researcher: NO APPROVE / NO REJECT */}
-              <div className="pt-2 space-y-2">
+              {/* Action Controls for Researcher */}
+              <div className="pt-2 border-t border-slate-100 space-y-2">
                 {obs.verification_status !== 'VERIFIED' && (
                   <button
                     onClick={() => setIsEditing(!isEditing)}
                     className="w-full py-2.5 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold shadow-sm flex items-center justify-center gap-2 transition-all"
                   >
                     <Edit3 className="w-3.5 h-3.5" />
-                    <span>Edit Metadata</span>
+                    <span>{isEditing ? 'Close Editing' : 'Edit Metadata'}</span>
                   </button>
                 )}
 
@@ -566,7 +599,7 @@ export function ReviewDetailPage() {
                 </button>
 
                 <button
-                  onClick={() => navigate('/workspace/review')}
+                  onClick={() => navigate(obs.processing_job_id ? `/workspace/review?jobId=${obs.processing_job_id}` : '/workspace/review')}
                   className="w-full py-2 px-3 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-600 text-xs font-medium flex items-center justify-center gap-2 transition-all"
                 >
                   <ArrowLeft className="w-3.5 h-3.5 text-slate-500" />
@@ -580,7 +613,7 @@ export function ReviewDetailPage() {
                   Awaiting institutional verification. Researchers may inspect and edit unverified findings, but only Knowledge Admins can grant official sign-off.
                 </p>
               </div>
-            </>
+            </div>
           )}
         </div>
       </div>

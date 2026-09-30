@@ -34,13 +34,10 @@ export function ProcessingPage() {
             return;
           }
         }
-        // Fallback to latest job in repository
-        const allJobs = await getProcessingJobs();
-        if (allJobs && allJobs.length > 0) {
-          setJob(allJobs[0]);
-        }
+        setJob(null);
       } catch (e) {
         console.warn('Error loading processing job:', e);
+        setJob(null);
       } finally {
         setLoading(false);
       }
@@ -63,6 +60,34 @@ export function ProcessingPage() {
   const obsCount = job?.result_summary?.observations_found ?? 0;
   const evidenceCount = job?.result_summary?.evidence_links_count ?? 0;
 
+  if (!loading && !job) {
+    return (
+      <div className="max-w-xl mx-auto py-12 text-center space-y-4">
+        <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-500 flex items-center justify-center mx-auto border border-slate-200">
+          <Layers className="w-6 h-6" />
+        </div>
+        <h2 className="text-base font-bold text-slate-900">No Processing Job Selected</h2>
+        <p className="text-xs text-slate-500 max-w-sm mx-auto">
+          No active ingestion job was specified. Ingest a research package to run deterministic multimodal processing.
+        </p>
+        <div className="flex items-center justify-center gap-3 pt-2">
+          <button
+            onClick={() => navigate('/workspace/ingest')}
+            className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold shadow-sm transition-colors"
+          >
+            Ingest Research Package
+          </button>
+          <button
+            onClick={() => navigate('/workspace/review')}
+            className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-800 border border-slate-200 rounded-xl text-xs font-semibold shadow-subtle transition-colors"
+          >
+            View All Submissions
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-3xl mx-auto space-y-8 py-4">
       {/* Header */}
@@ -72,10 +97,10 @@ export function ProcessingPage() {
           <span>{isCompleted ? 'Multimodal Pipeline Complete' : 'Pipeline Active'}</span>
         </div>
         <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-          {job ? `Processing: ${job.filename}` : 'Understanding Your Research Package'}
+          Processing: {job?.filename}
         </h1>
         <p className="text-xs text-slate-500 max-w-lg mx-auto">
-          Heterogeneous research material transformed into structured knowledge while preserving exact provenance to source files.
+          Job <code className="font-mono font-bold text-slate-700 bg-slate-100 px-1 py-0.5 rounded">{job?.id}</code> — materials transformed into structured knowledge scoped exclusively to this upload.
         </p>
       </div>
 

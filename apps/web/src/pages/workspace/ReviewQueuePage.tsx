@@ -180,23 +180,41 @@ export function ReviewQueuePage() {
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-slate-800">Operational Processing Pipeline</span>
+              <span className="text-xs font-bold text-slate-800">
+                {jobId ? 'Job Scoped Ingestion Run' : 'Operational Processing Pipeline'}
+              </span>
               <span className="text-[10px] font-mono px-2 py-0.2 rounded font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 uppercase">
-                {jobs.filter((j) => j.status === 'processing' || j.status === 'queued').length > 0
+                {jobId
+                  ? 'Scoped to Job'
+                  : jobs.filter((j) => j.status === 'processing' || j.status === 'queued').length > 0
                   ? `${jobs.filter((j) => j.status === 'processing' || j.status === 'queued').length} In-Flight`
                   : 'All Jobs Processed'}
               </span>
             </div>
             <p className="text-[11px] text-slate-500">
-              {jobs.length === 0
-                ? 'No ingestion runs recorded. New uploads automatically flow through deterministic multimodal parsing.'
-                : `Latest run: ${jobs[0]?.filename || 'Upload'} (${jobs[0]?.status || 'completed'}) • ${jobs.length} total ingest jobs tracked`}
+              {jobId ? (
+                <>
+                  Showing output exclusively for <code className="font-mono font-bold text-slate-700">{jobId}</code>. Other ingested findings are omitted.
+                </>
+              ) : jobs.length === 0 ? (
+                'No ingestion runs recorded. New uploads automatically flow through deterministic multimodal parsing.'
+              ) : (
+                `Latest run: ${jobs[0]?.filename || 'Upload'} (${jobs[0]?.status || 'completed'}) • ${jobs.length} total ingest jobs tracked`
+              )}
             </p>
           </div>
         </div>
 
-        {jobs.length > 0 && (
-          <div className="flex items-center gap-2 self-end md:self-center shrink-0">
+        <div className="flex items-center gap-2 self-end md:self-center shrink-0">
+          {jobId ? (
+            <button
+              onClick={() => setSearchParams({})}
+              className="text-xs font-semibold text-polar-700 hover:text-polar-900 bg-polar-50 hover:bg-polar-100 px-3 py-1.5 rounded-xl border border-polar-200 transition-colors flex items-center gap-1.5"
+            >
+              <span>View All Submissions (All Jobs)</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          ) : jobs.length > 0 ? (
             <button
               onClick={() => navigate(`/workspace/processing?jobId=${jobs[0].id}`)}
               className="text-xs font-semibold text-polar-700 hover:text-polar-900 bg-polar-50 hover:bg-polar-100 px-3 py-1.5 rounded-xl border border-polar-200 transition-colors flex items-center gap-1.5"
@@ -204,8 +222,8 @@ export function ReviewQueuePage() {
               <span>Inspect Latest Run ({jobs[0].id})</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
-          </div>
-        )}
+          ) : null}
+        </div>
       </div>
 
       {/* Observation Cards */}
