@@ -8,6 +8,7 @@ export * from "./database.types.js";
 export type VerificationStatus =
   | "AI_EXTRACTED"
   | "NEEDS_REVIEW"
+  | "PENDING_ADMIN_REVIEW"
   | "VERIFIED"
   | "REJECTED";
 
@@ -173,6 +174,8 @@ export interface Observation {
   confidence_level: ConfidenceLevel;
   verification_status: VerificationStatus;
   created_at: string;
+  created_by?: string;
+  created_by_name?: string;
   demo?: boolean;
   processing_job_id?: string;
   source_file_id?: string;

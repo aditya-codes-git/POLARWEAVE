@@ -23,12 +23,37 @@ import {
 const envObj = (typeof import.meta !== 'undefined' && (import.meta as any).env) ? (import.meta as any).env : (typeof process !== 'undefined' && process.env) ? process.env : {};
 const API_BASE = envObj.VITE_API_URL || 'http://localhost:5000';
 
+export function getAuthHeader(): Record<string, string> {
+  try {
+    const sbAuthKey = Object.keys(localStorage).find((k) => k.startsWith('sb-') && k.endsWith('-auth-token'));
+    if (sbAuthKey) {
+      const raw = localStorage.getItem(sbAuthKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed?.access_token) {
+          return { Authorization: `Bearer ${parsed.access_token}` };
+        }
+      }
+    }
+    const activeRole = localStorage.getItem('polarweave_demo_role') || 'researcher';
+    if (activeRole === 'admin') {
+      return { Authorization: 'Bearer demo-admin-token' };
+    } else if (activeRole === 'public') {
+      return { Authorization: 'Bearer demo-public-token' };
+    }
+  } catch (e) {
+    console.warn('[POLARWEAVE API] Failed to extract auth token:', e);
+  }
+  return { Authorization: 'Bearer demo-researcher-token' };
+}
+
 async function safeFetch<T>(endpoint: string, options?: RequestInit): Promise<T> {
   try {
     const res = await fetch(`${API_BASE}${endpoint}`, {
       ...options,
       headers: {
         'Content-Type': 'application/json',
+        ...getAuthHeader(),
         ...(options?.headers || {})
       }
     });
@@ -174,22 +199,26 @@ export async function getEvidenceTrace(knowledgeId: string): Promise<EvidenceTra
 // VERIFICATION WORKFLOW
 // ---------------------------------------------
 export async function submitReview(entityType: string, id: string, action: ReviewAction): Promise<any> {
-  try {
-    const res = await fetch(`${API_BASE}/api/review/${entityType}/${id}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(action)
-    });
-    const json = await res.json();
-    return json.data;
-  } catch {
-    const idx = DEMO_OBSERVATIONS.findIndex((o) => o.id === id);
-    if (idx !== -1) {
-      DEMO_OBSERVATIONS[idx].verification_status = action.action === 'approve' ? 'VERIFIED' : action.action === 'reject' ? 'REJECTED' : 'VERIFIED';
-      return DEMO_OBSERVATIONS[idx];
-    }
-    return { status: 'success' };
+  const headers = {
+    'Content-Type': 'application/json',
+    ...getAuthHeader()
+  };
+
+  const res = await fetch(`${API_BASE}/api/review/${entityType}/${id}`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(action)
+  });
+
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok || json.success === false) {
+    const errorMsg = json.error?.message || `Review action failed with status ${res.status}`;
+    const err = new Error(errorMsg);
+    (err as any).code = json.error?.code || 'FORBIDDEN';
+    (err as any).status = res.status;
+    throw err;
   }
+  return json.data;
 }
 
 // ---------------------------------------------

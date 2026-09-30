@@ -478,6 +478,8 @@ export async function createObservation(obs: Observation): Promise<Observation> 
         verification_status: obs.verification_status || 'AI_EXTRACTED',
         processing_job_id: obs.processing_job_id || null,
         source_file_id: obs.source_file_id || null,
+        created_by: obs.created_by || null,
+        created_by_name: obs.created_by_name || null,
         created_at: obs.created_at || new Date().toISOString(),
         demo: obs.demo ?? false
       });
@@ -968,6 +970,8 @@ export async function getKnowledgeGraphData(filters?: { jobId?: string; scope?: 
 // -------------------------------------------------------------
 // 9. HUMAN REVIEW & VERIFICATION AUDIT TRAIL PERSISTENCE
 // -------------------------------------------------------------
+// VERIFICATION WORKFLOW & AUDIT
+// -------------------------------------------------------------
 export async function reviewKnowledgeEntity(
   entityType: string,
   id: string,
@@ -977,13 +981,12 @@ export async function reviewKnowledgeEntity(
     reviewer_name?: string;
     notes?: string;
     edited_data?: any;
+    caller_role?: 'admin' | 'researcher' | 'public';
   }
-): Promise<{ updated_entity: any; audit_record: any }> {
+): Promise<{ updated_entity: any; audit_record: any | null }> {
   if (entityType !== 'observation') {
     throw new Error(`Review for ${entityType} is not currently supported.`);
   }
-
-  const newStatus = action === 'reject' ? 'REJECTED' : 'VERIFIED';
 
   // 1. Fetch previous state
   let previousValue: any = null;
@@ -992,20 +995,33 @@ export async function reviewKnowledgeEntity(
     previousValue = { ...memoryStore.observations[memObsIdx] };
   }
 
+  if (supabase && !previousValue) {
+    const { data: dbPrev } = await supabase
+      .from('observations')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+    if (dbPrev) previousValue = dbPrev;
+  }
+
+  // Determine target verification status based on state machine
+  let newStatus: string;
+  if (action === 'approve') {
+    newStatus = 'VERIFIED';
+  } else if (action === 'reject') {
+    newStatus = 'REJECTED';
+  } else {
+    // action === 'edit':
+    // If an unverified record is edited, it remains in review (PENDING_ADMIN_REVIEW).
+    // If a verified record was edited, require it to return to PENDING_ADMIN_REVIEW.
+    newStatus = 'PENDING_ADMIN_REVIEW';
+  }
+
   let updatedEntity: any = null;
 
   // 2. Update PostgreSQL observations table
   if (supabase) {
     try {
-      if (!previousValue) {
-        const { data: dbPrev } = await supabase
-          .from('observations')
-          .select('*')
-          .eq('id', id)
-          .maybeSingle();
-        if (dbPrev) previousValue = dbPrev;
-      }
-
       const updateData: any = {
         verification_status: newStatus
       };
@@ -1028,29 +1044,33 @@ export async function reviewKnowledgeEntity(
         updatedEntity = dbUpdated;
       }
 
-      // Also update linked evidence status in DB
-      await supabase
-        .from('evidence_links')
-        .update({ verification_status: newStatus })
-        .eq('knowledge_id', id);
+      // Also update linked evidence status in DB for verification decisions
+      if (action === 'approve' || action === 'reject') {
+        await supabase
+          .from('evidence_links')
+          .update({ verification_status: newStatus })
+          .eq('knowledge_id', id);
+      }
 
-      // 3. Create verification_records row in PostgreSQL
-      const auditId = `ver_${uuidv4().slice(0, 8)}`;
-      const { error: verErr } = await supabase.from('verification_records').insert({
-        id: auditId,
-        entity_type: 'observation',
-        entity_id: id,
-        reviewer_id: null, // Set null to respect profiles(id) foreign key constraint
-        reviewer_name: payload.reviewer_name || 'Dr. Rajesh Sharma',
-        status: action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : 'edited',
-        notes: payload.notes || 'Reviewed via POLARWEAVE verification workflow',
-        previous_value: previousValue || {},
-        new_value: updatedEntity || previousValue || {},
-        reviewed_at: new Date().toISOString()
-      });
+      // 3. Create verification_records row in PostgreSQL ONLY for Admin verification decisions (approve/reject)
+      if (action === 'approve' || action === 'reject') {
+        const auditId = `ver_${uuidv4().slice(0, 8)}`;
+        const { error: verErr } = await supabase.from('verification_records').insert({
+          id: auditId,
+          entity_type: 'observation',
+          entity_id: id,
+          reviewer_id: null, // Set null to respect profiles(id) foreign key constraint
+          reviewer_name: payload.reviewer_name || 'Dr. Sunita Bose',
+          status: action === 'approve' ? 'approved' : 'rejected',
+          notes: payload.notes || 'Institutional review decision by Knowledge Admin',
+          previous_value: previousValue || {},
+          new_value: updatedEntity || previousValue || {},
+          reviewed_at: new Date().toISOString()
+        });
 
-      if (verErr) {
-        console.warn(`[POLARWEAVE DB] Error inserting verification_record:`, verErr.message);
+        if (verErr) {
+          console.warn(`[POLARWEAVE DB] Error inserting verification_record:`, verErr.message);
+        }
       }
     } catch (err: any) {
       console.warn(`[POLARWEAVE DB] Exception updating review state:`, err?.message);
@@ -1067,30 +1087,36 @@ export async function reviewKnowledgeEntity(
       memoryStore.observations[memObsIdx] = {
         ...memoryStore.observations[memObsIdx],
         ...payload.edited_data,
-        verification_status: 'VERIFIED'
+        verification_status: 'PENDING_ADMIN_REVIEW'
       };
     }
     updatedEntity = memoryStore.observations[memObsIdx];
 
-    memoryStore.evidenceLinks
-      .filter((e) => e.knowledge_id === id)
-      .forEach((e) => {
-        e.verification_status = newStatus;
-      });
+    if (action === 'approve' || action === 'reject') {
+      memoryStore.evidenceLinks
+        .filter((e) => e.knowledge_id === id)
+        .forEach((e) => {
+          e.verification_status = newStatus as any;
+        });
+    }
   }
 
-  const auditRecord = {
-    id: `ver_${uuidv4().slice(0, 8)}`,
-    entity_type: 'observation' as const,
-    entity_id: id,
-    reviewer_id: payload.reviewer_id || 'usr_researcher_sharma',
-    reviewer_name: payload.reviewer_name || 'Dr. Rajesh Sharma',
-    status: action === 'approve' ? ('approved' as const) : action === 'reject' ? ('rejected' as const) : ('edited' as const),
-    notes: payload.notes || 'Reviewed via POLARWEAVE verification workflow',
-    previous_value: previousValue,
-    new_value: updatedEntity,
-    reviewed_at: new Date().toISOString()
-  };
+  // Audit record return (only created for approve/reject)
+  let auditRecord: any = null;
+  if (action === 'approve' || action === 'reject') {
+    auditRecord = {
+      id: `ver_${uuidv4().slice(0, 8)}`,
+      entity_type: 'observation' as const,
+      entity_id: id,
+      reviewer_id: payload.reviewer_id || 'usr_admin_bose',
+      reviewer_name: payload.reviewer_name || 'Dr. Sunita Bose',
+      status: action === 'approve' ? ('approved' as const) : ('rejected' as const),
+      notes: payload.notes || 'Institutional review decision by Knowledge Admin',
+      previous_value: previousValue,
+      new_value: updatedEntity,
+      reviewed_at: new Date().toISOString()
+    };
+  }
 
   return {
     updated_entity: updatedEntity,

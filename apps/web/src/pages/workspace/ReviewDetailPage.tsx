@@ -12,21 +12,27 @@ import {
   ShieldCheck,
   ExternalLink,
   ChevronRight,
-  Info
+  Info,
+  Clock,
+  AlertTriangle
 } from 'lucide-react';
 import { getObservationById, submitReview } from '../../lib/api';
 import { Observation, EvidenceLink } from '@polarweave/types';
 import { ConfidenceBadge, VerificationBadge, DomainBadge } from '../../components/ui/badges';
 import { EvidenceDrawer } from '../../components/EvidenceDrawer';
+import { useRole } from '../../context/RoleContext';
 
 export function ReviewDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { role, user } = useRole();
+  const isAdmin = role === 'admin';
 
   const [obs, setObs] = useState<(Observation & { measurements?: any[]; evidence?: EvidenceLink[] }) | null>(null);
   const [loading, setLoading] = useState(true);
   const [isEvidenceDrawerOpen, setIsEvidenceDrawerOpen] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editedTitle, setEditedTitle] = useState('');
   const [editedDesc, setEditedDesc] = useState('');
@@ -64,35 +70,58 @@ export function ReviewDetailPage() {
           onClick={() => navigate('/workspace/review')}
           className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-semibold"
         >
-          Return to Review Queue
+          {isAdmin ? 'Return to Verification Queue' : 'Return to My Submissions'}
         </button>
       </div>
     );
   }
 
   const handleApprove = async () => {
-    await submitReview('observation', obs.id, { action: 'approve' });
-    setObs({ ...obs, verification_status: 'VERIFIED' });
-    setStatusMessage('Observation approved and verified.');
-    setTimeout(() => setStatusMessage(null), 4000);
+    try {
+      setErrorMessage(null);
+      await submitReview('observation', obs.id, { action: 'approve' });
+      setObs({ ...obs, verification_status: 'VERIFIED' });
+      setStatusMessage('Observation institutionally approved and verified.');
+      setTimeout(() => setStatusMessage(null), 4000);
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Unauthorized: Only Knowledge Admins can verify submissions.');
+      setTimeout(() => setErrorMessage(null), 6000);
+    }
   };
 
   const handleReject = async () => {
-    await submitReview('observation', obs.id, { action: 'reject' });
-    setObs({ ...obs, verification_status: 'REJECTED' });
-    setStatusMessage('Observation marked as rejected.');
-    setTimeout(() => setStatusMessage(null), 4000);
+    try {
+      setErrorMessage(null);
+      await submitReview('observation', obs.id, { action: 'reject' });
+      setObs({ ...obs, verification_status: 'REJECTED' });
+      setStatusMessage('Observation marked as rejected.');
+      setTimeout(() => setStatusMessage(null), 4000);
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Unauthorized: Only Knowledge Admins can reject submissions.');
+      setTimeout(() => setErrorMessage(null), 6000);
+    }
   };
 
   const handleSaveEdit = async () => {
-    await submitReview('observation', obs.id, {
-      action: 'edit',
-      edited_data: { title: editedTitle, description: editedDesc }
-    });
-    setObs({ ...obs, title: editedTitle, description: editedDesc });
-    setIsEditing(false);
-    setStatusMessage('Metadata updated successfully.');
-    setTimeout(() => setStatusMessage(null), 4000);
+    try {
+      setErrorMessage(null);
+      await submitReview('observation', obs.id, {
+        action: 'edit',
+        edited_data: { title: editedTitle, description: editedDesc }
+      });
+      setObs({
+        ...obs,
+        title: editedTitle,
+        description: editedDesc,
+        verification_status: obs.verification_status === 'VERIFIED' && !isAdmin ? 'PENDING_ADMIN_REVIEW' : obs.verification_status
+      });
+      setIsEditing(false);
+      setStatusMessage('Metadata updated successfully.');
+      setTimeout(() => setStatusMessage(null), 4000);
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Failed to update metadata.');
+      setTimeout(() => setErrorMessage(null), 6000);
+    }
   };
 
   const evidenceList = obs.evidence || [];
@@ -106,7 +135,7 @@ export function ReviewDetailPage() {
           className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600 hover:text-slate-900 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
-          <span>Back to Verification Queue</span>
+          <span>{isAdmin ? 'Back to Verification Queue' : 'Back to My Submissions'}</span>
         </button>
 
         <div className="flex items-center gap-3">
@@ -122,8 +151,21 @@ export function ReviewDetailPage() {
 
       {statusMessage && (
         <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 flex items-center justify-between">
-          <span>{statusMessage}</span>
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{statusMessage}</span>
+          </div>
           <button onClick={() => setStatusMessage(null)} className="font-bold">×</button>
+        </div>
+      )}
+
+      {errorMessage && (
+        <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+            <span>{errorMessage}</span>
+          </div>
+          <button onClick={() => setErrorMessage(null)} className="font-bold text-rose-600 hover:text-rose-900">×</button>
         </div>
       )}
 
@@ -317,65 +359,223 @@ export function ReviewDetailPage() {
 
         {/* COLUMN 3: EVIDENCE AUDIT & ACTIONS (3 cols) */}
         <div className="lg:col-span-3 bg-white border border-slate-200 rounded-2xl p-5 shadow-subtle space-y-5">
-          <div className="border-b border-slate-100 pb-3">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-              3. Verification & Sign-off
-            </h2>
-            <p className="text-xs text-slate-800 font-medium">
-              Scientist audit trail
-            </p>
-          </div>
+          {isAdmin ? (
+            /* ADMIN VIEW: INSTITUTIONAL GOVERNANCE & VERIFICATION */
+            <>
+              <div className="border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-1.5 text-purple-700 font-semibold text-[11px] font-mono uppercase tracking-wider mb-1">
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span>Institutional Governance</span>
+                </div>
+                <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  3. Verification & Sign-off
+                </h2>
+                <p className="text-xs text-slate-800 font-medium">
+                  Authoritative administrative decision
+                </p>
+              </div>
 
-          <div className="space-y-2 text-xs">
-            <div className="flex items-center justify-between text-slate-600">
-              <span>Current Status:</span>
-              <VerificationBadge status={obs.verification_status} />
-            </div>
-            <div className="flex items-center justify-between text-slate-600">
-              <span>Confidence:</span>
-              <span className="font-mono text-slate-900">{Math.round(obs.confidence * 100)}%</span>
-            </div>
-            <div className="flex items-center justify-between text-slate-600">
-              <span>Location:</span>
-              <span className="font-medium text-slate-900 truncate max-w-[130px]" title={obs.location_name}>
-                {obs.location_name || 'Unspecified'}
-              </span>
-            </div>
-          </div>
+              {/* Status & Reviewer Indication */}
+              {obs.verification_status === 'VERIFIED' ? (
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs space-y-1">
+                  <div className="flex items-center gap-1.5 font-semibold text-emerald-800">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    <span>Status: VERIFIED</span>
+                  </div>
+                  <p className="text-[11px] text-emerald-700">
+                    Verified by Dr. Sunita Bose (Knowledge Admin)
+                  </p>
+                </div>
+              ) : obs.verification_status === 'REJECTED' ? (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs space-y-1">
+                  <div className="flex items-center gap-1.5 font-semibold text-rose-800">
+                    <XCircle className="w-4 h-4 text-rose-600" />
+                    <span>Status: REJECTED</span>
+                  </div>
+                  <p className="text-[11px] text-rose-700">
+                    Rejected by Knowledge Admin. Returned to author.
+                  </p>
+                </div>
+              ) : (
+                <div className="p-3 bg-purple-50 border border-purple-200 rounded-xl text-xs space-y-1">
+                  <div className="flex items-center gap-1.5 font-semibold text-purple-900">
+                    <ShieldCheck className="w-4 h-4 text-purple-700" />
+                    <span>Admin Verification Required</span>
+                  </div>
+                  <p className="text-[11px] text-purple-700 leading-relaxed">
+                    Institutional governance decision. Your review locks this fact for public dissemination.
+                  </p>
+                </div>
+              )}
 
-          {/* Action Buttons */}
-          <div className="pt-2 space-y-2">
-            <button
-              onClick={handleApprove}
-              className="w-full py-2.5 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold shadow-sm flex items-center justify-center gap-2 transition-all"
-            >
-              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-              <span>Approve & Verify</span>
-            </button>
+              <div className="space-y-2 text-xs">
+                <div className="flex items-center justify-between text-slate-600">
+                  <span>Current Status:</span>
+                  <VerificationBadge status={obs.verification_status} />
+                </div>
+                <div className="flex items-center justify-between text-slate-600">
+                  <span>Confidence:</span>
+                  <span className="font-mono text-slate-900">{Math.round(obs.confidence * 100)}%</span>
+                </div>
+                <div className="flex items-center justify-between text-slate-600">
+                  <span>Submitter:</span>
+                  <span className="font-medium text-slate-900 truncate max-w-[130px]">
+                    {obs.created_by_name || 'Dr. Rajesh Sharma'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-slate-600">
+                  <span>Location:</span>
+                  <span className="font-medium text-slate-900 truncate max-w-[130px]" title={obs.location_name}>
+                    {obs.location_name || 'Unspecified'}
+                  </span>
+                </div>
+              </div>
 
-            <button
-              onClick={() => setIsEditing(!isEditing)}
-              className="w-full py-2 px-3 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-800 text-xs font-medium shadow-subtle flex items-center justify-center gap-2 transition-all"
-            >
-              <Edit3 className="w-3.5 h-3.5 text-slate-600" />
-              <span>Edit Metadata</span>
-            </button>
+              {/* Action Buttons for Admin */}
+              <div className="pt-2 space-y-2">
+                {obs.verification_status !== 'VERIFIED' && (
+                  <button
+                    onClick={handleApprove}
+                    className="w-full py-2.5 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold shadow-sm flex items-center justify-center gap-2 transition-all"
+                  >
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    <span>Approve & Verify</span>
+                  </button>
+                )}
 
-            <button
-              onClick={handleReject}
-              className="w-full py-2 px-3 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-medium flex items-center justify-center gap-2 transition-all"
-            >
-              <XCircle className="w-3.5 h-3.5 text-rose-600" />
-              <span>Reject Observation</span>
-            </button>
-          </div>
+                <button
+                  onClick={() => setIsEditing(!isEditing)}
+                  className="w-full py-2 px-3 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-800 text-xs font-medium shadow-subtle flex items-center justify-center gap-2 transition-all"
+                >
+                  <Edit3 className="w-3.5 h-3.5 text-slate-600" />
+                  <span>Edit Metadata</span>
+                </button>
 
-          <div className="p-3 bg-polar-50/60 rounded-xl border border-polar-200/60 text-xs text-polar-800 space-y-1">
-            <span className="font-semibold block">Evidence Trace Anchored</span>
-            <p className="text-[11px] text-polar-700 leading-relaxed">
-              Approving locks this fact and links it permanently into the Knowledge Graph and Outreach Studio.
-            </p>
-          </div>
+                {obs.verification_status !== 'REJECTED' && (
+                  <button
+                    onClick={handleReject}
+                    className="w-full py-2 px-3 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-medium flex items-center justify-center gap-2 transition-all"
+                  >
+                    <XCircle className="w-3.5 h-3.5 text-rose-600" />
+                    <span>Reject Observation</span>
+                  </button>
+                )}
+              </div>
+
+              <div className="p-3 bg-polar-50/60 rounded-xl border border-polar-200/60 text-xs text-polar-800 space-y-1">
+                <span className="font-semibold block">Evidence Trace Anchored</span>
+                <p className="text-[11px] text-polar-700 leading-relaxed">
+                  Approving locks this fact and links it permanently into the Knowledge Graph and Outreach Studio.
+                </p>
+              </div>
+            </>
+          ) : (
+            /* RESEARCHER / CONTRIBUTOR VIEW: AUTHOR PEER STATUS */
+            <>
+              <div className="border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-1.5 text-amber-700 font-semibold text-[11px] font-mono uppercase tracking-wider mb-1">
+                  <Clock className="w-3.5 h-3.5" />
+                  <span>Author Peer Status</span>
+                </div>
+                <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  3. Submission Status
+                </h2>
+                <p className="text-xs text-slate-800 font-medium">
+                  Tracking institutional verification
+                </p>
+              </div>
+
+              {/* Status Banner */}
+              {obs.verification_status === 'VERIFIED' ? (
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs space-y-1">
+                  <div className="flex items-center gap-1.5 font-semibold text-emerald-800">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    <span>Status: VERIFIED</span>
+                  </div>
+                  <p className="text-[11px] text-emerald-700 leading-relaxed">
+                    Verified by Dr. Sunita Bose (Knowledge Admin). Your finding is now locked and eligible for public exploration.
+                  </p>
+                </div>
+              ) : obs.verification_status === 'REJECTED' ? (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs space-y-1">
+                  <div className="flex items-center gap-1.5 font-semibold text-rose-800">
+                    <XCircle className="w-4 h-4 text-rose-600" />
+                    <span>Status: REJECTED</span>
+                  </div>
+                  <p className="text-[11px] text-rose-700 leading-relaxed">
+                    Knowledge Admin requested revision or rejected the finding. Edit metadata or consult the reviewer notes.
+                  </p>
+                </div>
+              ) : (
+                <div className="p-3.5 bg-amber-50/80 border border-amber-200/80 rounded-xl text-xs space-y-2">
+                  <div className="flex items-center gap-1.5 font-semibold text-amber-900">
+                    <Clock className="w-4 h-4 text-amber-600" />
+                    <span>Awaiting Knowledge Admin Review</span>
+                  </div>
+                  <p className="text-[11px] text-amber-800 leading-relaxed">
+                    Your submission is ready for institutional verification.
+                  </p>
+                  <div className="pt-2 border-t border-amber-200/60 flex items-center justify-between text-[10px] text-amber-800 font-mono">
+                    <span className="bg-amber-100/70 px-1.5 py-0.5 rounded">Pending Admin Review</span>
+                    <span>By: {obs.created_by_name || 'Dr. Rajesh Sharma'}</span>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-2 text-xs">
+                <div className="flex items-center justify-between text-slate-600">
+                  <span>Current Status:</span>
+                  <VerificationBadge status={obs.verification_status} />
+                </div>
+                <div className="flex items-center justify-between text-slate-600">
+                  <span>Confidence:</span>
+                  <span className="font-mono text-slate-900">{Math.round(obs.confidence * 100)}%</span>
+                </div>
+                <div className="flex items-center justify-between text-slate-600">
+                  <span>Location:</span>
+                  <span className="font-medium text-slate-900 truncate max-w-[130px]" title={obs.location_name}>
+                    {obs.location_name || 'Unspecified'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Action Controls for Researcher: NO APPROVE / NO REJECT */}
+              <div className="pt-2 space-y-2">
+                {obs.verification_status !== 'VERIFIED' && (
+                  <button
+                    onClick={() => setIsEditing(!isEditing)}
+                    className="w-full py-2.5 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold shadow-sm flex items-center justify-center gap-2 transition-all"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                    <span>Edit Metadata</span>
+                  </button>
+                )}
+
+                <button
+                  onClick={() => setIsEvidenceDrawerOpen(true)}
+                  className="w-full py-2 px-3 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-800 text-xs font-medium shadow-subtle flex items-center justify-center gap-2 transition-all"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5 text-polar-600" />
+                  <span>View Evidence Provenance</span>
+                </button>
+
+                <button
+                  onClick={() => navigate('/workspace/review')}
+                  className="w-full py-2 px-3 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-600 text-xs font-medium flex items-center justify-center gap-2 transition-all"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Back to My Submissions</span>
+                </button>
+              </div>
+
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-700 space-y-1">
+                <span className="font-semibold text-slate-800 block">Separation of Duties</span>
+                <p className="text-[11px] text-slate-600 leading-relaxed">
+                  Awaiting institutional verification. Researchers may inspect and edit unverified findings, but only Knowledge Admins can grant official sign-off.
+                </p>
+              </div>
+            </>
+          )}
         </div>
       </div>
 

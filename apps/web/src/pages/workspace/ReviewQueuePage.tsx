@@ -67,20 +67,20 @@ export function ReviewQueuePage() {
                   : 'text-amber-700 bg-amber-50 border-amber-200'
               }`}
             >
-              {isAdmin ? 'NCPOR Institutional Governance' : 'Author Peer Verification'}
+              {isAdmin ? 'NCPOR Institutional Governance' : 'Author Submissions Tracking'}
             </span>
             <span className="text-xs text-slate-400">•</span>
             <span className="text-xs text-slate-500 font-mono">
-              {isAdmin ? 'INSTITUTIONAL REVIEW QUEUE' : 'MY SUBMISSIONS'}
+              {isAdmin ? 'VERIFICATION QUEUE' : 'MY SUBMISSIONS'}
             </span>
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-            {isAdmin ? 'Institutional Review Queue' : 'My Submissions Review'}
+            {isAdmin ? 'Institutional Verification Queue' : 'My Submissions'}
           </h1>
           <p className="text-xs text-slate-500 mt-1">
             {isAdmin
               ? 'Institution-wide verification queue. Sign-off on researcher findings before institutional archiving and public dissemination.'
-              : 'Inspect and sign-off on structured observations extracted from your uploaded research materials.'}
+              : 'Track your uploaded research packages, inspect AI-extracted observations, and follow Knowledge Admin verification decisions.'}
           </p>
         </div>
 
@@ -220,9 +220,16 @@ export function ReviewQueuePage() {
                 </p>
               </div>
 
-              <div className="flex items-center gap-4 shrink-0">
+              <div className="flex items-center gap-3 shrink-0">
                 <ConfidenceBadge confidence={obs.confidence} />
                 <VerificationBadge status={obs.verification_status} />
+                <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg transition-colors hidden sm:inline-block ${
+                  isAdmin
+                    ? 'bg-slate-900 text-white group-hover:bg-polar-600'
+                    : 'bg-slate-100 text-slate-700 group-hover:bg-slate-200'
+                }`}>
+                  {isAdmin ? 'Verify Fact' : 'View Status'}
+                </span>
                 <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500 group-hover:bg-polar-100 group-hover:text-polar-700 transition-colors">
                   <ChevronRight className="w-4 h-4" />
                 </div>

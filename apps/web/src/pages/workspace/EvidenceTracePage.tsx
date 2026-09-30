@@ -18,8 +18,11 @@ import {
 import { getObservations, getEvidenceTrace, EvidenceTracePayload } from '../../lib/api';
 import { Observation, EvidenceLink } from '@polarweave/types';
 import { ConfidenceBadge, VerificationBadge, DomainBadge } from '../../components/ui/badges';
+import { useRole } from '../../context/RoleContext';
 
 export function EvidenceTracePage() {
+  const { role } = useRole();
+  const isAdmin = role === 'admin';
   const [searchParams] = useSearchParams();
   const initialObsId = searchParams.get('obsId');
 
@@ -130,8 +133,31 @@ export function EvidenceTracePage() {
               </p>
             </div>
 
+            {/* Role-Aware Governance Notice (Section 11) */}
+            <div className={`mt-4 p-3 rounded-xl border text-xs flex items-center justify-between gap-3 ${
+              isAdmin
+                ? 'bg-purple-50/70 border-purple-200 text-purple-900'
+                : 'bg-amber-50/70 border-amber-200 text-amber-900'
+            }`}>
+              <div className="flex items-center gap-2">
+                <Info className="w-4 h-4 shrink-0 text-current opacity-70" />
+                <span>
+                  {isAdmin
+                    ? (selectedObs.verification_status === 'VERIFIED'
+                        ? 'Institutional Verification Active: This observation is locked and verified by Knowledge Admin.'
+                        : 'Institutional Sign-off: Approving locks this fact and links it permanently into the Knowledge Graph and Outreach Studio.')
+                    : (selectedObs.verification_status === 'VERIFIED'
+                        ? 'Institutional Verification Active: Confirmed by Knowledge Admin.'
+                        : 'Awaiting institutional verification. Only Knowledge Admins can verify and lock authoritative institutional facts.')}
+                </span>
+              </div>
+              <span className="text-[10px] font-mono uppercase tracking-wider font-semibold opacity-75 shrink-0">
+                {isAdmin ? 'ADMIN GOVERNANCE' : 'AUTHOR SUBMISSION'}
+              </span>
+            </div>
+
             {/* Sub-header Banner */}
-            <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+            <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
               <div className="flex items-center gap-2">
                 <ShieldCheck className="w-4 h-4 text-emerald-600" />
                 <span className="font-semibold text-slate-800">

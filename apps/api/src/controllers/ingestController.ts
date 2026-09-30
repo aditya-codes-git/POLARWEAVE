@@ -185,13 +185,15 @@ export async function processFiles(req: Request, res: Response) {
               location_name: ob.location || 'Unspecified Location',
               confidence: ob.confidence,
               confidence_level: ob.confidence > 0.85 ? 'HIGH' : ob.confidence > 0.6 ? 'MEDIUM' : 'LOW',
-              verification_status: 'AI_EXTRACTED',
+              verification_status: 'NEEDS_REVIEW',
               processing_job_id: jobId,
               source_file_id: docId,
               source_file_name: f.originalname,
               excerpt: ob.excerpt,
               page_number: ob.page_number || undefined,
               created_at: new Date().toISOString(),
+              created_by: req.user?.id || 'usr_researcher_sharma',
+              created_by_name: req.user?.name || 'Dr. Rajesh Sharma',
               demo: false
             };
 
@@ -254,12 +256,14 @@ export async function processFiles(req: Request, res: Response) {
               location_name: ob.location || 'Unspecified Location',
               confidence: ob.confidence,
               confidence_level: ob.confidence > 0.85 ? 'HIGH' : 'MEDIUM',
-              verification_status: 'AI_EXTRACTED',
+              verification_status: 'NEEDS_REVIEW',
               processing_job_id: jobId,
               source_file_id: docId,
               source_file_name: f.originalname,
               excerpt: ob.excerpt,
               created_at: new Date().toISOString(),
+              created_by: req.user?.id || 'usr_researcher_sharma',
+              created_by_name: req.user?.name || 'Dr. Rajesh Sharma',
               demo: false
             };
             await createObservation(newObs);
@@ -330,13 +334,15 @@ export async function processFiles(req: Request, res: Response) {
             location_name: imageAnalysis.is_polar_related ? 'Bharati Research Station' : 'Unspecified Location',
             confidence: imageAnalysis.confidence,
             confidence_level: imageAnalysis.confidence > 0.85 ? 'HIGH' : 'MEDIUM',
-            verification_status: 'AI_EXTRACTED',
+            verification_status: 'NEEDS_REVIEW',
             processing_job_id: jobId,
             source_file_id: mediaId,
             source_file_name: f.originalname,
             excerpt: imageAnalysis.caption,
             demo: false,
-            created_at: new Date().toISOString()
+            created_at: new Date().toISOString(),
+            created_by: req.user?.id || 'usr_researcher_sharma',
+            created_by_name: req.user?.name || 'Dr. Rajesh Sharma'
           };
 
           await createObservation(imgObs);

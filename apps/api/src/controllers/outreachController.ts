@@ -37,6 +37,15 @@ export async function generateContent(req: Request, res: Response) {
 
     const generated = await generateAudienceOutreach(validated, sourceObs, allEvidence);
 
+    // Tag unverified sources as Draft (Section 13)
+    const hasUnverifiedSources = sourceObs.some((o) => o.verification_status !== 'VERIFIED');
+    if (hasUnverifiedSources) {
+      generated.status = 'draft';
+      if (!generated.title.includes('DRAFT — Awaiting Verification')) {
+        generated.title = `DRAFT — Awaiting Verification: ${generated.title}`;
+      }
+    }
+
     // Persist to PostgreSQL generated_content table
     await saveGeneratedContent(generated);
 
@@ -105,6 +114,37 @@ export async function getOutreachById(req: Request, res: Response) {
 
 export async function updateOutreach(req: Request, res: Response) {
   const { id } = req.params;
+  const user = req.user;
+
+  // Guard: Only Knowledge Admins can publish outreach content
+  if (req.body.status === 'published') {
+    if (!user || user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'FORBIDDEN',
+          message: 'Only Knowledge Admins can publish outreach content to public channels.'
+        }
+      });
+    }
+
+    const allContent = await getGeneratedContent();
+    const item = allContent.find((c) => c.id === id);
+    if (item && item.source_knowledge_ids?.length > 0) {
+      const allObs = await fetchObservations();
+      const sources = allObs.filter((o) => item.source_knowledge_ids.includes(o.id));
+      const hasUnverified = sources.some((o) => o.verification_status !== 'VERIFIED');
+      if (hasUnverified) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: 'UNVERIFIED_SOURCES',
+            message: 'Cannot publish outreach content containing unverified findings. Institutional Admin verification required.'
+          }
+        });
+      }
+    }
+  }
 
   if (supabase) {
     try {
