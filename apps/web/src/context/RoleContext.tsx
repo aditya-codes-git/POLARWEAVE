@@ -136,8 +136,10 @@ export function RoleProvider({ children }: { children: ReactNode }) {
     const email = sbUser.email || '';
     const avatar = meta.avatar_url || meta.picture;
     const isAdm = email.toLowerCase().includes('admin') || meta.role === 'admin';
-    const initialRole: UserRole = isAdm ? 'admin' : 'researcher';
-    let resolvedRole: UserRole = initialRole;
+
+    // Prioritize the user's currently persisted active role (e.g. if switched to admin/public or already admin)
+    const persistedRole = (localStorage.getItem(STORAGE_KEY) || localStorage.getItem('polarweave_demo_role')) as UserRole | null;
+    let resolvedRole: UserRole = isAdm ? 'admin' : (persistedRole === 'admin' || persistedRole === 'public') ? persistedRole : 'researcher';
     let institution = meta.institution || 'National Centre for Polar and Ocean Research (NCPOR)';
     let designation = '';
     let country = '';
@@ -146,7 +148,7 @@ export function RoleProvider({ children }: { children: ReactNode }) {
     try {
       const backendProfile = await getCurrentUserProfile();
       if (backendProfile) {
-        if (backendProfile.role && backendProfile.role !== 'admin') {
+        if (backendProfile.role) {
           resolvedRole = backendProfile.role as UserRole;
         }
         if (backendProfile.organization || backendProfile.institution) {
@@ -238,6 +240,7 @@ export function RoleProvider({ children }: { children: ReactNode }) {
 
     try {
       localStorage.setItem(STORAGE_KEY, newRole);
+      localStorage.setItem('polarweave_demo_role', newRole);
       localStorage.setItem('polarweave_user', JSON.stringify(DEMO_PROFILES[newRole]));
       localStorage.setItem('polarweave_auth_token', token);
       localStorage.setItem('polarweave_session', JSON.stringify({
